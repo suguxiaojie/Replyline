@@ -2,11 +2,13 @@
 
 基于 [Tendedero v1.5.0](https://github.com/alejandrobujan/tendedero/tree/cf87e6ebc275d4f2cc42900e55f88a52d3ce9e46) 的 Mac 微信客服素材工具。固定话术与固定图片独立保存，原来的截图晾衣架继续负责临时截图。
 
+正式发行：[v0.3.4 Release](https://github.com/suguxiaojie/Replyline/releases/tag/v0.3.4)，包含中文更新说明、DMG 和 SHA-256 校验文件。
+
 ## 使用
 
 当前交付为 Replyline 0.3.4，固定安装在 `/Applications/Replyline.app`，支持 macOS 14 及以上，包含 Apple silicon 和 Intel 二进制。预构建包使用 Apple Development 证书签名，源码构建产物为 `app/build/Replyline.app`。
 
-下载 [Replyline-0.3.4.dmg](https://github.com/suguxiaojie/Replyline/raw/refs/heads/main/installers/Replyline-0.3.4.dmg)，约 1.71 MiB，[SHA-256 校验文件](installers/Replyline-0.3.4.dmg.sha256)。DMG 内含当前已验证的应用、Applications 快捷方式、安装说明与 MIT 许可，应用及镜像均使用现有证书签名，未做 Apple 公证。安装或更新前正常退出旧版，再打开 DMG，将 Replyline.app 拖入 Applications；已有旧版时选择替换，然后从「应用程序」启动。
+下载 [Replyline-0.3.4.dmg](https://github.com/suguxiaojie/Replyline/releases/download/v0.3.4/Replyline-0.3.4.dmg)，约 1.71 MiB，[SHA-256 校验文件](https://github.com/suguxiaojie/Replyline/releases/download/v0.3.4/Replyline-0.3.4.dmg.sha256)。DMG 内含当前已验证的应用、Applications 快捷方式、安装说明与 MIT 许可，应用及镜像均使用现有证书签名，未做 Apple 公证。安装或更新前正常退出旧版，再打开 DMG，将 Replyline.app 拖入 Applications；已有旧版时选择替换，然后从「应用程序」启动。
 
 首次安装时按需授予辅助功能权限，用于双击菜单栏空白处和截屏快捷键分类定位。本机已验证同一开发者签名身份及固定路径更新可保留授权；跨设备首次授权仍由各自系统管理。
 
