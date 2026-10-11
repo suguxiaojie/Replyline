@@ -1,0 +1,32 @@
+/* Spanish. */
+
+/* AppDelegate */
+"Could not change the login setting" = "No se pudo cambiar el inicio de sesión";
+"Move Replyline to the Applications folder and try again." = "Mueve Replyline a la carpeta Aplicaciones y vuelve a intentarlo.";
+"Change Shortcut" = "Cambiar atajo";
+"Space" = "Espacio";
+"Press the new shortcut" = "Pulsa el nuevo atajo";
+"Escape cancels. Delete removes the shortcut." = "Escape cancela. Borrar quita el atajo.";
+"Small" = "Pequeño";
+"Medium" = "Mediano";
+"Large" = "Grande";
+"Replyline, hanging copied images" = "Replyline, colgando imágenes copiadas";
+
+/* GrabArea */
+"Copy" = "Copiar";
+"Open" = "Abrir";
+"Quick Look" = "Vista Rápida";
+"Markup" = "Marcación";
+"Show in Finder" = "Mostrar en Finder";
+"Save to Desktop" = "Guardar en el Escritorio";
+"Discard" = "Descartar";
+"Take down" = "Descolgar";
+"Move to Trash" = "Mover a la Papelera";
+"Take down everything to the left" = "Descolgar todo lo de la izquierda";
+"Take down everything to the right" = "Descolgar todo lo de la derecha";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "Haz una captura y se quedará colgada aquí";
+
+/* PeggedView */
+"Copied" = "Copiado";

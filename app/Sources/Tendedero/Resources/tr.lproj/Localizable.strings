@@ -1,0 +1,32 @@
+/* Turkish. */
+
+/* AppDelegate */
+"Could not change the login setting" = "Giriş ayarı değiştirilemedi";
+"Move Replyline to the Applications folder and try again." = "Replyline'yu Uygulamalar klasörüne taşıyın ve tekrar deneyin.";
+"Change Shortcut" = "Kısayolu değiştir";
+"Space" = "Boşluk";
+"Press the new shortcut" = "Yeni kısayolu basın";
+"Escape cancels. Delete removes the shortcut." = "Escape iptal eder. Sil kısayolu kaldırır.";
+"Small" = "Küçük";
+"Medium" = "Orta";
+"Large" = "Büyük";
+"Replyline, hanging copied images" = "Replyline, kopyalanan görselleri asıyor";
+
+/* GrabArea */
+"Copy" = "Kopyala";
+"Open" = "Aç";
+"Quick Look" = "Hızlı Bakış";
+"Markup" = "İşaretle";
+"Show in Finder" = "Finder'da göster";
+"Save to Desktop" = "Masaüstüne kaydet";
+"Discard" = "Sil";
+"Take down" = "İndir";
+"Move to Trash" = "Çöp Kutusu'na taşı";
+"Take down everything to the left" = "Soldakilerin hepsini indir";
+"Take down everything to the right" = "Sağdakilerin hepsini indir";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "Bir ekran görüntüsü al, buraya asılacak";
+
+/* PeggedView */
+"Copied" = "Kopyalandı";

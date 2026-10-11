@@ -1,0 +1,34 @@
+/* Azerbaijani. Each key is the English text exactly as written in L("...")
+   in the code. Every language has the same keys; run
+   swift scripts/check-strings.swift to check. */
+
+/* AppDelegate */
+"Could not change the login setting" = "Giriş ayarını dəyişmək alınmadı";
+"Move Replyline to the Applications folder and try again." = "Replyline-nu Applications (Proqramlar) qovluğuna köçürün və yenidən cəhd edin.";
+"Change Shortcut" = "Qısayolu dəyiş";
+"Space" = "Boşluq";
+"Press the new shortcut" = "Yeni qısayolu basın";
+"Escape cancels. Delete removes the shortcut." = "Escape ləğv edir. Sil qısayolu silir.";
+"Small" = "Kiçik";
+"Medium" = "Orta";
+"Large" = "Böyük";
+"Replyline, hanging copied images" = "Replyline, kopyalanmış şəkilləri asır";
+
+/* GrabArea */
+"Copy" = "Kopyala";
+"Open" = "Aç";
+"Quick Look" = "Tez baxış";
+"Markup" = "İşarələmə";
+"Show in Finder" = "Finder-də göstər";
+"Save to Desktop" = "İş masasında saxla";
+"Discard" = "At";
+"Take down" = "İpdən götür";
+"Move to Trash" = "Zibil qutusuna at";
+"Take down everything to the left" = "Soldakıların hamısını götür";
+"Take down everything to the right" = "Sağdakıların hamısını götür";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "Ekran şəkli çəkin, burada asılacaq";
+
+/* PeggedView */
+"Copied" = "Kopyalandı";

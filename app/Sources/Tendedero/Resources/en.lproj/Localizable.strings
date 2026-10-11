@@ -1,0 +1,34 @@
+/* English. Each key is the English text exactly as written in L("...") in
+   the code. Every language has the same keys; run
+   swift scripts/check-strings.swift to check. */
+
+/* AppDelegate */
+"Could not change the login setting" = "Could not change the login setting";
+"Move Replyline to the Applications folder and try again." = "Move Replyline to the Applications folder and try again.";
+"Change Shortcut" = "Change Shortcut";
+"Space" = "Space";
+"Press the new shortcut" = "Press the new shortcut";
+"Escape cancels. Delete removes the shortcut." = "Escape cancels. Delete removes the shortcut.";
+"Small" = "Small";
+"Medium" = "Medium";
+"Large" = "Large";
+"Replyline, hanging copied images" = "Replyline, hanging copied images";
+
+/* GrabArea */
+"Copy" = "Copy";
+"Open" = "Open";
+"Quick Look" = "Quick Look";
+"Markup" = "Markup";
+"Show in Finder" = "Show in Finder";
+"Save to Desktop" = "Save to Desktop";
+"Discard" = "Discard";
+"Take down" = "Take down";
+"Move to Trash" = "Move to Trash";
+"Take down everything to the left" = "Take down everything to the left";
+"Take down everything to the right" = "Take down everything to the right";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "Take a screenshot and it will hang here";
+
+/* PeggedView */
+"Copied" = "Copied";

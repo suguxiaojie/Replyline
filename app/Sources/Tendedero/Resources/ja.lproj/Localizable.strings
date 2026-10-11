@@ -1,0 +1,32 @@
+/* Japanese. */
+
+/* AppDelegate */
+"Could not change the login setting" = "ログイン時の設定を変更できませんでした";
+"Move Replyline to the Applications folder and try again." = "Replylineを「アプリケーション」フォルダに移動してから、もう一度お試しください。";
+"Change Shortcut" = "ショートカットを変更";
+"Space" = "スペース";
+"Press the new shortcut" = "新しいショートカットを押してください";
+"Escape cancels. Delete removes the shortcut." = "escでキャンセル、deleteでショートカットを削除します。";
+"Small" = "小";
+"Medium" = "中";
+"Large" = "大";
+"Replyline, hanging copied images" = "Replyline、コピーした画像を吊るしています";
+
+/* GrabArea */
+"Copy" = "コピー";
+"Open" = "開く";
+"Quick Look" = "クイックルック";
+"Markup" = "マークアップ";
+"Show in Finder" = "Finderで表示";
+"Save to Desktop" = "デスクトップに保存";
+"Discard" = "破棄";
+"Take down" = "外す";
+"Move to Trash" = "ゴミ箱に入れる";
+"Take down everything to the left" = "左側をすべて外す";
+"Take down everything to the right" = "右側をすべて外す";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "スクリーンショットを撮ると、ここに吊るされます";
+
+/* PeggedView */
+"Copied" = "コピーしました";

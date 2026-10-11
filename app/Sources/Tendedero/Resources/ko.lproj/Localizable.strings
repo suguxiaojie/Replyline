@@ -1,0 +1,32 @@
+/* Korean. */
+
+/* AppDelegate */
+"Could not change the login setting" = "로그인 설정을 변경할 수 없음";
+"Move Replyline to the Applications folder and try again." = "Replyline를 응용 프로그램 폴더로 옮긴 다음 다시 시도하세요.";
+"Change Shortcut" = "단축키 변경";
+"Space" = "스페이스";
+"Press the new shortcut" = "새 단축키를 누르세요";
+"Escape cancels. Delete removes the shortcut." = "Esc 키를 누르면 취소되고, Delete 키를 누르면 단축키가 지워져요.";
+"Small" = "작게";
+"Medium" = "중간";
+"Large" = "크게";
+"Replyline, hanging copied images" = "Replyline, 복사한 이미지 거는 중";
+
+/* GrabArea */
+"Copy" = "복사하기";
+"Open" = "열기";
+"Quick Look" = "훑어보기";
+"Markup" = "마크업";
+"Show in Finder" = "Finder에서 보기";
+"Save to Desktop" = "데스크탑에 저장";
+"Discard" = "버리기";
+"Take down" = "걷어내기";
+"Move to Trash" = "휴지통으로 이동";
+"Take down everything to the left" = "왼쪽 모두 걷어내기";
+"Take down everything to the right" = "오른쪽 모두 걷어내기";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "스크린샷을 찍으면 여기에 걸려요";
+
+/* PeggedView */
+"Copied" = "복사됨";

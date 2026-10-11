@@ -1,0 +1,32 @@
+/* French. */
+
+/* AppDelegate */
+"Could not change the login setting" = "Impossible de modifier l’ouverture à la connexion";
+"Move Replyline to the Applications folder and try again." = "Placez Replyline dans le dossier Applications, puis réessayez.";
+"Change Shortcut" = "Modifier le raccourci";
+"Space" = "Espace";
+"Press the new shortcut" = "Appuyez sur le nouveau raccourci";
+"Escape cancels. Delete removes the shortcut." = "Échap annule. Effacer supprime le raccourci.";
+"Small" = "Petite";
+"Medium" = "Moyenne";
+"Large" = "Grande";
+"Replyline, hanging copied images" = "Replyline, accroche les images copiées";
+
+/* GrabArea */
+"Copy" = "Copier";
+"Open" = "Ouvrir";
+"Quick Look" = "Coup d’œil";
+"Markup" = "Annotation";
+"Show in Finder" = "Afficher dans le Finder";
+"Save to Desktop" = "Enregistrer sur le bureau";
+"Discard" = "Jeter";
+"Take down" = "Décrocher";
+"Move to Trash" = "Placer dans la corbeille";
+"Take down everything to the left" = "Tout décrocher à gauche";
+"Take down everything to the right" = "Tout décrocher à droite";
+
+/* LineView */
+"Take a screenshot and it will hang here" = "Prenez une capture d’écran et elle s’accrochera ici";
+
+/* PeggedView */
+"Copied" = "Copié";
