@@ -19,6 +19,9 @@ struct Pegged: Identifiable, Equatable {
     var isLibraryItem: Bool { libraryCard != nil }
     /// A screen recording rather than a screenshot.
     var isRecording: Bool { Tendedero.isRecording(url) }
+    var orderKey: String {
+        libraryCard.map { "library:\($0.id.uuidString)" } ?? "file:\(url.standardizedFileURL.path)"
+    }
 
     static func == (a: Pegged, b: Pegged) -> Bool {
         a.id == b.id && a.falling == b.falling && a.flying == b.flying && a.thumb === b.thumb
@@ -34,6 +37,7 @@ final class Line: ObservableObject {
     @Published private(set) var gust = 0
     @Published var copiedID: UUID?
     @Published var draggingID: UUID?
+    @Published private(set) var settlingID: UUID?
     @Published var pressedID: UUID?
     @Published var previewedID: UUID?
     var onPreview: (UUID) -> Void = { _ in }
@@ -75,14 +79,26 @@ final class Line: ObservableObject {
     var onManageLibrary: (UUID?) -> Void = { _ in }
 
     private let storeKey = "pegged"
+    private let orderKey = "lineCardOrder"
+    // Arrival order is independent of visual order: moving a card must never
+    // change which temporary file is evicted when the line reaches capacity.
+    private var arrivals: [UUID] = []
+    private var reorderOrder: [String]?
+    private var reorderScroll: CGFloat = 0
+    private var grabOffset: CGFloat = 0
+    private var settlingToken = UUID()
     private let defaults: UserDefaults
     private let library: LibraryModel?
 
     init(library: LibraryModel? = nil, defaults: UserDefaults = .standard, breeze: Bool = true) {
         self.library = library
         self.defaults = defaults
+        let order = defaults.stringArray(forKey: orderKey) ?? []
         restore()
+        arrivals = items.map(\.id)
         syncLibrary()
+        items = arranged(items, accordingTo: order)
+        save()
         if breeze { scheduleGust() }
     }
 
@@ -90,6 +106,7 @@ final class Line: ObservableObject {
     /// arrival/swing animations are used only when a card first appears.
     func syncLibrary() {
         guard let library else { return }
+        let order = items.map(\.orderKey)
         let pinned = library.cards.filter(\.pinned)
         let ids = Set(pinned.map(\.id))
         for item in items where item.isLibraryItem && !item.falling {
@@ -104,8 +121,8 @@ final class Line: ObservableObject {
             item.libraryCard = card
             return item
         }
-        items = items.filter { !$0.isLibraryItem || $0.falling } + fixed
-        scroll = 0
+        items = arranged(items.filter { !$0.isLibraryItem || $0.falling } + fixed, accordingTo: order)
+        scroll(by: 0)
         save()
     }
 
@@ -125,17 +142,23 @@ final class Line: ObservableObject {
 
     @discardableResult
     func hang(_ url: URL, quietly: Bool = false, flying: Bool = false) -> UUID? {
-        guard !items.contains(where: { $0.url == url && !$0.falling }),
+        guard !items.contains(where: { $0.url.standardizedFileURL == url.standardizedFileURL && !$0.falling }),
               let thumb = makeThumbnail(url) else { return nil }
         var item = Pegged(url: url, thumb: thumb)
         item.flying = flying
+        if let order = reorderOrder {
+            var baseline = arranged(items, accordingTo: order).filter { !$0.falling }
+            baseline.insert(item, at: baseline.firstIndex { $0.isLibraryItem } ?? baseline.endIndex)
+            reorderOrder = baseline.map(\.orderKey)
+        }
         let fixedStart = items.firstIndex { $0.isLibraryItem } ?? items.endIndex
         items.insert(item, at: fixedStart)
+        arrivals.append(item.id)
         scroll = 0
         // A full line lets the oldest photo fall off the far end. Only one: a
         // line hung on a wider screen keeps its length here instead of losing
         // several photos to a single capture.
-        if temporaryCount > maxItems, let oldest = items.first(where: { !$0.falling && !$0.isLibraryItem }) {
+        if temporaryCount > maxItems, let oldest = oldestTemporary {
             letGo(oldest.id)
         }
         save()
@@ -287,10 +310,107 @@ final class Line: ObservableObject {
     /// After Keep on line is lowered, the oldest photos past it go the way
     /// of a full line.
     func trim() {
-        while temporaryCount > maxItems, let oldest = items.first(where: { !$0.falling && !$0.isLibraryItem }) {
+        while temporaryCount > maxItems, let oldest = oldestTemporary {
             letGo(oldest.id)
         }
         scroll = 0
+    }
+
+    private var oldestTemporary: Pegged? {
+        for id in arrivals {
+            if let item = items.first(where: { $0.id == id && !$0.falling && !$0.isLibraryItem }) { return item }
+        }
+        return nil
+    }
+
+    // MARK: Drag ordering
+
+    func beginReordering(_ id: UUID, pointerX: CGFloat, width: CGFloat) {
+        guard draggingID == nil, pointerX.isFinite, width.isFinite, width > 0,
+              let index = items.firstIndex(where: { $0.id == id && !$0.falling && !$0.flying }) else { return }
+        reorderOrder = items.filter { !$0.falling }.map(\.orderKey)
+        reorderScroll = scroll
+        grabOffset = pointerX - Layout.x(index: index, count: items.count, width: width,
+                                        visible: visibleCount, scroll: scroll, fixedCards: hasLibraryItems)
+        draggingID = id
+        settlingToken = UUID()
+        settlingID = nil
+    }
+
+    @discardableResult
+    func updateReordering(_ id: UUID, pointerX: CGFloat, width: CGFloat) -> Bool {
+        guard draggingID == id, reorderOrder != nil, width.isFinite, width > 0, pointerX.isFinite,
+              let source = items.firstIndex(where: { $0.id == id && !$0.falling }) else { return false }
+        let center = pointerX - grabOffset
+        let slots = items.indices.filter { !items[$0].falling }
+        let positions = items.indices.map {
+            Layout.x(index: $0, count: items.count, width: width,
+                     visible: visibleCount, scroll: scroll, fixedCards: hasLibraryItems)
+        }
+        guard let target = slots.min(by: { abs(positions[$0] - center) < abs(positions[$1] - center) }) else { return false }
+        let currentX = Layout.x(index: source, count: items.count, width: width,
+                                visible: visibleCount, scroll: scroll, fixedCards: hasLibraryItems)
+        let targetX = Layout.x(index: target, count: items.count, width: width,
+                               visible: visibleCount, scroll: scroll, fixedCards: hasLibraryItems)
+        // A small dead band prevents hand tremor at a midpoint from swapping
+        // two neighbours back and forth while they are still animating.
+        if source != target, abs(targetX - center) + 8 < abs(currentX - center) {
+            var next = items
+            let item = next.remove(at: source)
+            next.insert(item, at: target)
+            items = next
+        }
+        return true
+    }
+
+    /// Moving outside the strip returns the other cards to their places,
+    /// while the native drag continues into Finder, WeChat or another app.
+    func leaveReordering() {
+        guard let order = reorderOrder else { return }
+        items = arranged(items, accordingTo: order)
+        scroll = reorderScroll
+        scroll(by: 0)
+    }
+
+    @discardableResult
+    func commitReordering(_ id: UUID) -> Bool {
+        guard draggingID == id, reorderOrder != nil,
+              items.contains(where: { $0.id == id && !$0.falling }) else { return false }
+        reorderOrder = nil
+        save()
+        return true
+    }
+
+    func finishReordering(_ id: UUID) {
+        guard draggingID == id else { return }
+        leaveReordering()
+        reorderOrder = nil
+        // Let the returned card settle into the jaws before closing them.
+        // Keep this separate from the system drag, which has already ended.
+        settlingID = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : id
+        draggingID = nil
+        let token = UUID()
+        settlingToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { [weak self] in
+            guard let self, self.settlingToken == token, self.settlingID == id, self.draggingID != id else { return }
+            self.settlingID = nil
+        }
+    }
+
+    /// Reorder surviving known cards only. Concurrent arrivals retain their
+    /// slots and removed cards are never resurrected on cancel or restore.
+    private func arranged(_ source: [Pegged], accordingTo order: [String]) -> [Pegged] {
+        let live = source.filter { !$0.falling }
+        let known = Dictionary(uniqueKeysWithValues: live.map { ($0.orderKey, $0) })
+        var seen = Set<String>()
+        var sorted = order.compactMap { key -> Pegged? in
+            guard seen.insert(key).inserted else { return nil }
+            return known[key]
+        }.makeIterator()
+        return source.map { item in
+            guard !item.falling, seen.contains(item.orderKey) else { return item }
+            return sorted.next() ?? item
+        }
     }
 
     private func letGo(_ id: UUID) {
@@ -329,6 +449,7 @@ final class Line: ObservableObject {
     func markup(_ id: UUID) {
         guard let item = items.first(where: { $0.id == id }) else { return }
         if item.libraryCard?.kind == .text { manageLibrary(id); return }
+        if item.libraryCard?.kind == .video { quickLook(id); return }
         if item.isRecording {
             Trim.shared.edit(item.url, size: item.thumb.size)
         } else {
@@ -382,8 +503,16 @@ final class Line: ObservableObject {
     // MARK: Persistence
 
     private func save() {
-        let paths = items.filter { !$0.falling && !$0.isLibraryItem }.map(\.url.path)
+        let live = items.filter { !$0.falling }
+        let temporary = Dictionary(uniqueKeysWithValues: live.filter { !$0.isLibraryItem }.map { ($0.id, $0.url.path) })
+        arrivals.removeAll { temporary[$0] == nil }
+        let paths = arrivals.compactMap { temporary[$0] }
         defaults.set(paths, forKey: storeKey)
+        // Captures and library edits may arrive during a drag. Persist those
+        // changes without accidentally committing a provisional arrangement.
+        let baseline = arranged(live, accordingTo: reorderOrder ?? []).map(\.orderKey)
+        if reorderOrder != nil { reorderOrder = baseline }
+        defaults.set(baseline, forKey: orderKey)
     }
 
     /// Everything comes back as it was. This runs before the line knows its
@@ -393,7 +522,8 @@ final class Line: ObservableObject {
         let paths = defaults.stringArray(forKey: storeKey) ?? []
         for path in paths where FileManager.default.fileExists(atPath: path) {
             let url = URL(fileURLWithPath: path)
-            guard !items.contains(where: { $0.url == url }), let thumb = makeThumbnail(url) else { continue }
+            guard !items.contains(where: { $0.url.standardizedFileURL == url.standardizedFileURL }),
+                  let thumb = makeThumbnail(url) else { continue }
             items.append(Pegged(url: url, thumb: thumb))
         }
     }
@@ -416,7 +546,7 @@ final class Line: ObservableObject {
 
 /// Screen recordings, as macOS saves them.
 func isRecording(_ url: URL) -> Bool {
-    ["mov", "mp4"].contains(url.pathExtension.lowercased())
+    VideoImport.extensions.contains(url.pathExtension.lowercased())
 }
 
 /// The default size covers a card at twice its size in points, as on a

@@ -9,6 +9,7 @@ struct PeggedView: View {
     @State private var swing: Double = 0
     @State private var arrived = false
     @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var copied: Bool { line.copiedID == item.id }
     private var dragging: Bool { line.draggingID == item.id }
@@ -16,7 +17,7 @@ struct PeggedView: View {
 
     var body: some View {
         VStack(spacing: -12) {
-            Clothespin()
+            Clothespin(isOpen: dragging || line.settlingID == item.id)
                 .zIndex(1)
             card
         }
@@ -81,9 +82,14 @@ struct PeggedView: View {
             .shadow(color: .black.opacity(hovering ? 0.26 : 0.18), radius: hovering ? 14 : 10, y: hovering ? 8 : 5)
             // Holding presses the photo in slowly, so a long press feels like
             // it is building up to something.
-            .scaleEffect(pressed ? 0.95 : (hovering ? 1.035 : 1), anchor: .top)
+            .scaleEffect(dragging ? 0.98 : (pressed ? 0.95 : (hovering ? 1.035 : 1)), anchor: .top)
             .animation(pressed ? .easeInOut(duration: 0.45) : .spring(response: 0.3, dampingFraction: 0.6), value: pressed)
-            .opacity(dragging ? 0.45 : 1)
+            // The open clip stays on the rope as a landing place. The card
+            // steps away from its jaws while the system drag follows the hand.
+            .offset(y: dragging && !reduceMotion ? 8 : 0)
+            .opacity(dragging ? 0.22 : 1)
+            .animation(reduceMotion ? nil : (dragging ? .easeOut(duration: 0.16)
+                                                   : .spring(response: 0.26, dampingFraction: 0.86)), value: dragging)
             .overlay(alignment: .topLeading) {
                 // Drawn here, clicked through GrabView, which sits on top. A
                 // cross sends a file in Tendedero's folder to the Trash; for a
@@ -202,6 +208,8 @@ extension View {
 /// A minimal aluminium clip: a brushed metal pill with a slot where it
 /// grips the line, and a soft shadow so it reads on any background.
 struct Clothespin: View {
+    var isOpen = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let metal = LinearGradient(
         stops: [
             .init(color: Color(white: 0.70), location: 0),
@@ -212,6 +220,22 @@ struct Clothespin: View {
         startPoint: .leading, endPoint: .trailing)
 
     var body: some View {
+        ZStack {
+            // Both jaws meet in the original silhouette when closed. The
+            // hinge is at the rope slot, rather than at the end of the clip.
+            jaw
+                .brightness(-0.12)
+                .rotationEffect(.degrees(isOpen ? 19 : 0), anchor: UnitPoint(x: 0.5, y: 0.35))
+                .opacity(isOpen ? 1 : 0)
+            jaw
+                .rotationEffect(.degrees(isOpen ? -19 : 0), anchor: UnitPoint(x: 0.5, y: 0.35))
+        }
+        .frame(width: 9, height: 26)
+        .animation(reduceMotion ? nil : .spring(response: isOpen ? 0.18 : 0.24, dampingFraction: 0.82), value: isOpen)
+        .allowsHitTesting(false)
+    }
+
+    private var jaw: some View {
         RoundedRectangle(cornerRadius: 3.5, style: .continuous)
             .fill(metal)
             .frame(width: 9, height: 26)
@@ -229,6 +253,5 @@ struct Clothespin: View {
                     .padding(.top, 8.5)
             }
             .shadow(color: .black.opacity(0.30), radius: 2, y: 1.5)
-            .allowsHitTesting(false)
     }
 }

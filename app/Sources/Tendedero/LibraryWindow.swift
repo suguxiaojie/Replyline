@@ -45,6 +45,7 @@ private struct LibraryEditor: Identifiable {
     let id = UUID()
     let card: LibraryCard?
     let image: ImageImport?
+    var video: VideoImport? = nil
 }
 
 struct LibraryView: View {
@@ -56,6 +57,7 @@ struct LibraryView: View {
     @State private var deleting: LibraryCard?
     @FocusState private var searching: Bool
     @State private var dropping = false
+    @State private var importingVideo = false
 
     private var visible: [LibraryCard] {
         model.cards.filter { (kind == nil || $0.kind == kind) && $0.matches(query) }
@@ -81,18 +83,20 @@ struct LibraryView: View {
                     Label("新建话术", systemImage: "text.bubble")
                 }
                 Button(action: importImage) { Label("导入图片", systemImage: "photo.badge.plus") }
+                Button(action: importVideo) { Label("导入视频", systemImage: "video.badge.plus") }
                 Button(action: pasteImage) { Label("粘贴图片", systemImage: "doc.on.clipboard") }
             }
-            .disabled(!model.isWritable)
+            .disabled(!model.isWritable || importingVideo)
             .padding(20)
             HStack {
                 Picker("类型", selection: $kind) {
                     Text("全部").tag(Optional<LibraryKind>.none)
                     Text("话术").tag(Optional(LibraryKind.text))
                     Text("图片").tag(Optional(LibraryKind.image))
+                    Text("视频").tag(Optional(LibraryKind.video))
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 230)
+                .frame(width: 280)
                 Spacer()
                 Text("\(visible.count) 条素材").foregroundStyle(.secondary)
             }
@@ -102,7 +106,7 @@ struct LibraryView: View {
                 emptyState("素材库暂时无法打开", detail: error, symbol: "exclamationmark.triangle")
             } else if visible.isEmpty {
                 emptyState(query.isEmpty && model.cards.isEmpty ? "把常用回复放在这里" : "没有找到匹配的素材",
-                           detail: model.cards.isEmpty ? "话术和图片分别保存，置顶后会挂在晾衣架上。" : "试试标题、话术中的文字或关键词。",
+                           detail: model.cards.isEmpty ? "话术、图片和视频分别保存，置顶后会挂在晾衣架上。" : "试试标题、话术中的文字或关键词。",
                            symbol: model.cards.isEmpty ? "tray" : "magnifyingglass")
             } else {
                 ScrollView {
@@ -117,7 +121,7 @@ struct LibraryView: View {
             Divider()
             HStack(spacing: 6) {
                 Image(systemName: "pin.fill")
-                Text("可拖入图片，或按 ⌘V 粘贴图片；置顶素材长期保留。")
+                Text(importingVideo ? "正在读取素材…" : "可拖入图片或视频，按 ⌘V 粘贴图片；置顶素材长期保留。")
                 Spacer()
                 Text("Esc 返回").foregroundStyle(.tertiary)
             }
@@ -127,10 +131,20 @@ struct LibraryView: View {
         .background(.background)
         .background(ImagePasteShortcut(onImage: receiveImage))
         .onDrop(of: [.fileURL, .image], isTargeted: $dropping) { providers in
-            guard model.isWritable else { return false }
-            return ImageImport.load(providers) { result in
-                DispatchQueue.main.async { receiveImage(result) }
+            guard model.isWritable, !importingVideo else { return false }
+            importingVideo = true
+            let accepted = LibraryImport.load(providers) { result in
+                DispatchQueue.main.async {
+                    importingVideo = false
+                    switch result {
+                    case .success(.image(let input)): receiveImage(.success(input))
+                    case .success(.video(let input)): editor = LibraryEditor(card: nil, image: nil, video: input)
+                    case .failure(let error): model.error = error.localizedDescription
+                    }
+                }
             }
+            if !accepted { importingVideo = false }
+            return accepted
         }
         .overlay {
             if dropping {
@@ -142,7 +156,9 @@ struct LibraryView: View {
         .onChange(of: model.editingID) { _, _ in openEditor() }
         .onExitCommand(perform: close)
         .sheet(item: $editor) { draft in
-            LibraryEditorView(model: model, card: draft.card, source: draft.image)
+            if draft.video != nil || draft.card?.kind == .video {
+                VideoEditorView(model: model, card: draft.card, source: draft.video)
+            } else { LibraryEditorView(model: model, card: draft.card, source: draft.image) }
         }
         .alert("移除这条素材？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("取消", role: .cancel) { deleting = nil }
@@ -151,7 +167,7 @@ struct LibraryView: View {
                 deleting = nil
             }
         } message: {
-            Text("素材会从库和晾衣架移除，库内文件移到废纸篓。导入时的原始图片不会受影响。")
+            Text("素材会从库和晾衣架移除，库内文件移到废纸篓。导入时的原始文件不会受影响。")
         }
         .alert("操作未完成", isPresented: Binding(get: { model.error != nil && model.isWritable },
                                                set: { if !$0 { model.error = nil } })) {
@@ -172,27 +188,38 @@ struct LibraryView: View {
 
     private func tile(_ card: LibraryCard) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button { model.copy(card.id) } label: {
+            Button {
+                if card.kind == .video {
+                    if let url = model.assetURL(card) { QuickLook.shared.show([url], at: 0) }
+                } else { model.copy(card.id) }
+            } label: {
                 Group {
                     if card.kind == .text {
                         Text(card.text).font(.system(size: 13)).lineSpacing(4)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .padding(14)
-                    } else if let url = model.assetURL(card), let image = makeThumbnail(url, maxPixels: 500) {
+                    } else if let url = model.assetURL(card),
+                              let image = card.kind == .video ? libraryThumbnail(card, url: url) : makeThumbnail(url, maxPixels: 500) {
                         Image(nsImage: image).resizable().scaledToFit().padding(8)
+                            .overlay {
+                                if card.kind == .video {
+                                    Image(systemName: "play.fill").font(.system(size: 16, weight: .semibold))
+                                        .padding(12).background(.regularMaterial, in: Circle())
+                                }
+                            }
                     } else {
-                        Label("图片文件缺失", systemImage: "photo.badge.exclamationmark")
+                        Label("素材文件缺失", systemImage: "exclamationmark.triangle")
                     }
                 }
                 .frame(height: 124).frame(maxWidth: .infinity)
                 .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain).help(card.kind == .text ? "复制完整话术并返回聊天" : "复制图片并返回聊天")
+            .buttonStyle(.plain).help(card.kind == .video ? "预览视频" : (card.kind == .text ? "复制完整话术并返回聊天" : "复制图片并返回聊天"))
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(card.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(card.keywords.isEmpty ? (card.kind == .text ? "话术" : "图片") : card.keywords)
+                    Text(card.keywords.isEmpty ? card.kind.label : card.keywords)
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -213,6 +240,9 @@ struct LibraryView: View {
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary, lineWidth: 1))
         .contextMenu {
+            if card.kind == .video {
+                Button("播放视频…") { if let url = model.assetURL(card) { QuickLook.shared.show([url], at: 0) } }
+            }
             Button("复制") { model.copy(card.id) }
             Button("编辑") { editor = LibraryEditor(card: card, image: nil) }
             Button(card.pinned ? "取消置顶" : "置顶到晾衣架") { model.setPinned(card.id, !card.pinned) }
@@ -233,8 +263,23 @@ struct LibraryView: View {
 
     private func pasteImage() { receiveImage(Result { try ImageImport.from(.general) }) }
 
+    private func importVideo() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = VideoImport.contentTypes
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "导入视频"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importingVideo = true
+        Task { @MainActor in
+            defer { importingVideo = false }
+            do { editor = LibraryEditor(card: nil, image: nil, video: try await VideoImport.read(url)) }
+            catch { model.error = error.localizedDescription }
+        }
+    }
+
     private func receiveImage(_ result: Result<ImageImport, Error>) {
-        guard model.isWritable else { return }
+        guard model.isWritable, !importingVideo else { return }
         switch result {
         case .success(let input): editor = LibraryEditor(card: nil, image: input)
         case .failure(let error): model.error = error.localizedDescription

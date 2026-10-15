@@ -36,6 +36,17 @@ final class LibraryModel: ObservableObject {
         perform { try $0.setPinned(id, pinned) }
     }
 
+    func saveVideo(_ input: VideoImport, replacing id: UUID? = nil, title: String,
+                   keywords: String, pinned: Bool) async -> Bool {
+        guard let repository else { error = LibraryError.invalidLibrary.localizedDescription; return false }
+        do {
+            try await repository.saveVideo(input: input, replacing: id, title: title, keywords: keywords, pinned: pinned)
+            refresh()
+            onChange()
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
+
     func remove(_ card: LibraryCard) {
         _ = perform { repository in
             let removed = try repository.remove(card.id)
@@ -48,16 +59,28 @@ final class LibraryModel: ObservableObject {
                 try repository.restore(removed)
                 throw error
             }
+            if removed.kind == .video {
+                // The poster is a generated cache, not another user asset.
+                try? FileManager.default.removeItem(at: VideoImport.posterURL(for: repository.assetURL(for: removed)))
+            }
         }
     }
 
     @discardableResult
-    func copy(_ id: UUID, returnToChat: Bool = true) -> Bool {
+    func copy(_ id: UUID, returnToChat: Bool = true, pasteboard pb: NSPasteboard = .general) -> Bool {
         guard let card = repository?.find(id) else { return false }
-        let pb = NSPasteboard.general
         if card.kind == .text {
             pb.clearContents()
             guard pb.setString(card.text, forType: .string) else { return false }
+        } else if card.kind == .video {
+            guard let url = assetURL(card),
+                  let info = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  info.isRegularFile == true, (info.fileSize ?? 0) > 0 else {
+                error = "视频无法读取，请检查素材文件。"
+                return false
+            }
+            pb.clearContents()
+            guard pb.writeObjects([url as NSURL]) else { return false }
         } else {
             guard let url = assetURL(card), let data = imagePNG(url) else {
                 error = "图片无法读取，请检查素材文件。"
@@ -92,6 +115,11 @@ func imagePNG(_ url: URL) -> Data? {
 @MainActor
 func libraryThumbnail(_ card: LibraryCard, url: URL) -> NSImage? {
     if card.kind == .image { return makeThumbnail(url) }
+    if card.kind == .video {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return makeThumbnail(VideoImport.posterURL(for: url))
+            ?? NSImage(systemSymbolName: "video", accessibilityDescription: "视频")
+    }
     let size = NSSize(width: 320, height: 222)
     let image = NSImage(size: size)
     image.lockFocus()

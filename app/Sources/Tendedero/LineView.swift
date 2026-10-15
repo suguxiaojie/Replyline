@@ -37,6 +37,17 @@ enum Layout {
         return ropeTop + 4 * sag(width: width) * f * (1 - f)
     }
 
+    /// Ease into edge scrolling; clamp elapsed time after pauses so a slow
+    /// callback cannot jump across an entire collection.
+    static func reorderScrollDelta(pointerX: CGFloat, width: CGFloat, elapsed: TimeInterval) -> CGFloat {
+        guard width.isFinite, width > 0, pointerX.isFinite, elapsed.isFinite,
+              pointerX >= 0, pointerX <= width, elapsed > 0 else { return 0 }
+        let edge = min(72, width / 4)
+        let left = max(0, 1 - pointerX / edge)
+        let right = max(0, 1 - (width - pointerX) / edge)
+        return (left * left - right * right) * 420 * min(elapsed, 0.1)
+    }
+
     /// Photos hang `spacing` apart, centred. When there are more than the
     /// `visible` that fit: with Keep on line set, they keep their spacing,
     /// the newest stays where the last one would hang on a full line, and
@@ -55,6 +66,7 @@ enum Layout {
 
 struct LineView: View {
     @ObservedObject var line: Line
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
@@ -79,7 +91,10 @@ struct LineView: View {
                         .position(x: x, y: ropeY - Layout.pinAbove + (Layout.panelHeight - ropeY) / 2)
                 }
             }
-            .animation(.spring(response: 0.55, dampingFraction: 0.78), value: line.items.map(\.id))
+            .animation(line.draggingID != nil || line.settlingID != nil
+                       ? (reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.88))
+                       : .spring(response: 0.55, dampingFraction: 0.78), value: line.items.map(\.id))
+            .animation(line.draggingID != nil && !reduceMotion ? .linear(duration: 0.1) : nil, value: line.scroll)
             .animation(.easeInOut(duration: 0.3), value: line.items.isEmpty)
             // Tucked away, the whole line waits above the top edge and slides
             // out from under the menu bar, the way an auto-hiding Dock does.

@@ -225,7 +225,7 @@ final class LibraryTests: XCTestCase {
             let view = GrabView()
             view.copyOnly = true
             XCTAssertEqual(view.allowedOperations(outsideApp: true), [.copy])
-            XCTAssertEqual(view.allowedOperations(outsideApp: false), [])
+            XCTAssertEqual(view.allowedOperations(outsideApp: false), [.move])
             view.copyOnly = false
             XCTAssertEqual(view.allowedOperations(outsideApp: true), [.copy, .move, .delete])
         }

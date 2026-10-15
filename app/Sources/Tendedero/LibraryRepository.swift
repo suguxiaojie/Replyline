@@ -1,7 +1,11 @@
 import Foundation
 
 enum LibraryKind: String, Codable, CaseIterable {
-    case text, image
+    case text, image, video
+
+    var label: String {
+        switch self { case .text: return "话术"; case .image: return "图片"; case .video: return "视频" }
+    }
 }
 
 struct LibraryCard: Codable, Identifiable, Equatable {
@@ -24,13 +28,14 @@ struct LibraryCard: Codable, Identifiable, Equatable {
 }
 
 enum LibraryError: LocalizedError {
-    case emptyTitle, emptyText, invalidImage, invalidLibrary, missingCard, noClipboardImage
+    case emptyTitle, emptyText, invalidImage, invalidVideo, invalidLibrary, missingCard, noClipboardImage
 
     var errorDescription: String? {
         switch self {
         case .emptyTitle: return "请填写素材标题。"
         case .emptyText: return "话术内容不能为空。"
         case .invalidImage: return "请选择有效图片，文件不能超过 64 MB，图片不能超过 8,000 万像素。"
+        case .invalidVideo: return "请选择可播放的 MP4、MOV 或 M4V 视频；不支持损坏文件、纯音频或当前系统无法解码的格式。"
         case .invalidLibrary: return "素材库格式异常，已停止写入。请保留原文件后检查。"
         case .missingCard: return "这条素材已不存在，请重新打开素材库。"
         case .noClipboardImage: return "剪贴板里没有图片，请先复制图片或图片文件。"
@@ -124,7 +129,7 @@ final class LibraryRepository {
                 try replaceAsset(next, at: i, data: Data(text.utf8))
                 return
             }
-        } else if imageSource != nil || imageInput != nil {
+        } else if next[i].kind == .image, imageSource != nil || imageInput != nil {
             let input: ImageImport
             if let imageInput { input = imageInput }
             else { input = try ImageImport.read(imageSource!) }
@@ -133,6 +138,40 @@ final class LibraryRepository {
             return
         }
         try persist(next)
+    }
+
+    /// Copy and validate off the UI thread, then merge into the latest index
+    /// on the main actor so other edits during the copy cannot be lost.
+    @MainActor @discardableResult
+    func saveVideo(input: VideoImport, replacing id: UUID? = nil, title: String,
+                   keywords: String = "", pinned: Bool = true) async throws -> LibraryCard {
+        let title = try Self.checkedTitle(title)
+        if let id, find(id)?.kind != .video { throw LibraryError.missingCard }
+        try prepare()
+        let destination = assets.appendingPathComponent("\(UUID().uuidString).\(input.url.pathExtension.lowercased())")
+        let poster = VideoImport.posterURL(for: destination)
+        do {
+            let copied = try await VideoImport.copy(input.url, to: destination)
+            try Task.checkCancellation()
+            try writeAsset(copied.poster, to: poster)
+            let now = Date()
+            let existing = id.flatMap(find)
+            if id != nil && existing == nil { throw LibraryError.missingCard }
+            let card = LibraryCard(id: existing?.id ?? UUID(), kind: .video, title: title, keywords: keywords,
+                                   text: "", asset: destination.lastPathComponent, pinned: pinned,
+                                   createdAt: existing?.createdAt ?? now, updatedAt: now)
+            let next = existing == nil ? cards + [card] : cards.map { $0.id == card.id ? card : $0 }
+            try persist(next)
+            if let existing {
+                try? fm.removeItem(at: assetURL(for: existing))
+                try? fm.removeItem(at: VideoImport.posterURL(for: assetURL(for: existing)))
+            }
+            return card
+        } catch {
+            try? fm.removeItem(at: destination)
+            try? fm.removeItem(at: poster)
+            throw error
+        }
     }
 
     private func replaceAsset(_ next: [LibraryCard], at i: Int, data: Data) throws {
@@ -174,9 +213,11 @@ final class LibraryRepository {
               !card.asset.isEmpty, !card.asset.contains("/"), !card.asset.contains("\\"),
               !card.asset.hasPrefix(".") else { return false }
         let ext = (card.asset as NSString).pathExtension.lowercased()
-        return card.kind == .text
-            ? ext == "txt" && !card.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            : imageExtensions.contains(ext) && card.text.isEmpty
+        switch card.kind {
+        case .text: return ext == "txt" && !card.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .image: return imageExtensions.contains(ext) && card.text.isEmpty
+        case .video: return VideoImport.extensions.contains(ext) && card.text.isEmpty
+        }
     }
 
     private func prepare() throws {

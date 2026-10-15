@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let host = NSHostingView(rootView: LineView(line: line))
         host.sizingOptions = []
         panel = LinePanel(content: host)
+        panel.line = line
         panel.placeOnScreen()
         updateCapacity()
         line.onManageLibrary = { [weak self] id in self?.libraryWindow.show(editing: id) }

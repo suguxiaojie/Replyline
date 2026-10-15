@@ -6,8 +6,8 @@ cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
 APP="${REPLYLINE_APP_OUTPUT:-build/Replyline.app}"
-VERSION="${REPLYLINE_VERSION:-0.3.4}"
-BUILD_NUMBER="${REPLYLINE_BUILD_NUMBER:-21}"
+VERSION="${REPLYLINE_VERSION:-0.3.6}"
+BUILD_NUMBER="${REPLYLINE_BUILD_NUMBER:-23}"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version" >&2; exit 1; }
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "Invalid build number" >&2; exit 1; }
 

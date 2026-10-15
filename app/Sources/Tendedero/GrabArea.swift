@@ -4,6 +4,7 @@ import SwiftUI
 /// Bridges each photo to AppKit's drag and drop, so it can be dragged into
 /// any app as a real file. Each destination means one thing:
 ///
+/// - The line rearranges the card without moving its file.
 /// - An app gets a copy, and the photo stays on the line.
 /// - A folder or the Desktop keeps the file, and the photo leaves the line.
 /// - The Trash discards it.
@@ -32,14 +33,19 @@ struct GrabArea: NSViewRepresentable {
         view.copyOnly = item.isLibraryItem
         view.text = item.libraryCard?.kind == .text ? item.libraryCard?.text : nil
         view.dragImage = item.thumb
+        view.cardID = id
         view.onClick = { line.copy(id) }
         view.onDoubleClick = { line.open(id) }
-        view.onDragStart = { line.draggingID = id }
+        view.onDragStart = { [weak view] in
+            guard let view, let window = view.window else { return }
+            line.beginReordering(id, pointerX: view.dragStartX, width: window.frame.width)
+        }
         view.onDragEnd = {
-            line.draggingID = nil
+            line.finishReordering(id)
             // Moved into a folder: it is saved where you wanted it.
             line.prune()
         }
+        view.onFileMove = { line.prune() }
         view.onTrash = { line.trash(id) }
         view.onDiscard = { line.discard(id) }
         view.onLongPress = { line.markup(id) }
@@ -56,6 +62,12 @@ struct GrabArea: NSViewRepresentable {
                     menu.addItem(ClosureMenuItem(L("Open")) { line.open(id) })
                     menu.addItem(ClosureMenuItem(L("Quick Look")) { line.quickLook(id) })
                     menu.addItem(ClosureMenuItem(L("Markup")) { line.markup(id) })
+                    menu.addItem(ClosureMenuItem(L("Show in Finder")) { line.reveal(id) })
+                    menu.addItem(.separator())
+                }
+                if item.libraryCard?.kind == .video {
+                    menu.addItem(ClosureMenuItem("播放视频…") { line.quickLook(id) })
+                    menu.addItem(ClosureMenuItem(L("Open")) { line.open(id) })
                     menu.addItem(ClosureMenuItem(L("Show in Finder")) { line.reveal(id) })
                     menu.addItem(.separator())
                 }
@@ -101,10 +113,14 @@ final class GrabView: NSView, NSDraggingSource {
     var copyOnly = false
     var text: String?
     var dragImage: NSImage?
+    private(set) var liftedDragImage: NSImage?
+    var cardID: UUID?
+    private(set) var dragStartX: CGFloat = 0
     var onClick: () -> Void = {}
     var onDoubleClick: () -> Void = {}
     var onDragStart: () -> Void = {}
     var onDragEnd: () -> Void = {}
+    var onFileMove: () -> Void = {}
     var onTrash: () -> Void = {}
     var onDiscard: () -> Void = {}
     var onLongPress: () -> Void = {}
@@ -190,14 +206,18 @@ final class GrabView: NSView, NSDraggingSource {
         startedDrag = true
         endPress()
 
-        let writer: NSPasteboardWriting = text.map { $0 as NSString } ?? (url as NSURL)
+        let payload: NSPasteboardWriting = text.map { $0 as NSString } ?? (url as NSURL)
+        let writer: NSPasteboardWriting = cardID.map { CardDragWriter(id: $0, payload: payload) } ?? payload
         let item = NSDraggingItem(pasteboardWriter: writer)
-        item.setDraggingFrame(imageFrame(), contents: dragImage)
+        liftedDragImage = dragImage.map(CardDragPreview.image)
+        let previewFrame = liftedDragImage == nil ? bounds : bounds.insetBy(dx: -CardDragPreview.margin, dy: -CardDragPreview.margin)
+        item.setDraggingFrame(previewFrame, contents: liftedDragImage ?? dragImage)
+        dragStartX = start.x
+        GrabView.isDragging = true
+        onDragStart()
         let session = beginDraggingSession(with: [item], event: event, source: self)
         // Released where nothing accepts it: it flies back to the line.
         session.animatesToStartingPositionsOnCancelOrFail = true
-        GrabView.isDragging = true
-        onDragStart()
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -224,7 +244,7 @@ final class GrabView: NSView, NSDraggingSource {
     }
 
     func allowedOperations(outsideApp: Bool) -> NSDragOperation {
-        guard outsideApp else { return [] }
+        guard outsideApp else { return [.move] }
         return copyOnly ? [.copy] : [.copy, .move, .delete]
     }
 
@@ -232,6 +252,7 @@ final class GrabView: NSView, NSDraggingSource {
         GrabView.isDragging = false
         startedDrag = false
         downPoint = nil
+        liftedDragImage = nil
         log.notice("Drag ended with operation \(operation.rawValue, privacy: .public)")
         // Dropped on the Trash: macOS only tells us, we move the file.
         if operation.contains(.delete) && !copyOnly {
@@ -243,18 +264,11 @@ final class GrabView: NSView, NSDraggingSource {
         // Finder finishes a move a moment later. Check again then, so a photo
         // saved into a folder leaves the line.
         if operation.contains(.move) {
-            let done = onDragEnd
+            let done = onFileMove
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { done() }
         }
     }
 
-    /// The drag preview keeps the photo's aspect ratio inside the card.
-    private func imageFrame() -> NSRect {
-        guard let size = dragImage?.size, size.width > 0, size.height > 0 else { return bounds }
-        let scale = min(bounds.width / size.width, bounds.height / size.height)
-        let w = size.width * scale, h = size.height * scale
-        return NSRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
-    }
 }
 
 final class ClosureMenuItem: NSMenuItem {
