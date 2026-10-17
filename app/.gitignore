@@ -1,0 +1,16 @@
+.build/
+build/
+.DS_Store
+*.xcodeproj
+.swiftpm/
+.tmp/
+.env
+.env.*
+!.env.example
+!.env.*.example
+.idea/
+.vscode/
+.codex/
+.claude/
+.finesse/
+.signing-identity

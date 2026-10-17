@@ -165,29 +165,35 @@ struct QuickMenuView: View {
     @ObservedObject var model: QuickMenuModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Namespace private var highlight
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "tshirt").font(.system(size: 14)).foregroundStyle(SettingsTheme.secondary).accessibilityHidden(true)
-                Text("Replyline").font(.system(size: 13, weight: .semibold)).foregroundStyle(SettingsTheme.ink)
+            HStack(spacing: 9) {
+                Image(systemName: "tshirt").font(.system(size: 18, weight: .light)).foregroundStyle(SettingsTheme.accent).accessibilityHidden(true)
+                Text("Replyline").font(.system(size: 14, weight: .semibold)).tracking(-0.2).foregroundStyle(SettingsTheme.ink)
                 Spacer()
-                Text("\(model.fixedCount) 固定 · \(model.temporaryCount) 临时")
-                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(SettingsTheme.muted)
+                HStack(spacing: 8) {
+                    Text("\(model.fixedCount) 固定")
+                    Text("\(model.temporaryCount) 临时")
+                }
+                .font(.system(size: 10)).monospacedDigit().foregroundStyle(SettingsTheme.secondary)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(SettingsTheme.inset, in: Capsule())
             }
-            .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 18)
+            .padding(.horizontal, 10).padding(.top, 7).padding(.bottom, 16)
             ForEach(Array(model.menu.items.enumerated()), id: \.offset) { index, item in
                 if item.isSeparatorItem {
                     Rectangle().fill(SettingsTheme.line).frame(height: 0.5).padding(.horizontal, 10).padding(.vertical, 6)
                 } else {
-                    QuickActionCell(model: model, index: index, item: item, primary: index < 2)
+                    QuickActionCell(model: model, index: index, item: item, primary: index < 2, highlight: highlight)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(12).frame(width: 320)
-        .background(reduceTransparency ? SettingsTheme.panel : .clear)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: model.selectedIndex)
+        .padding(10).frame(width: 320)
+        .background(SettingsTheme.sidebar.opacity(reduceTransparency ? 1 : 0.98))
+        .animation(reduceMotion ? nil : AppMotion.control, value: model.selectedIndex)
     }
 }
 
@@ -196,6 +202,7 @@ private struct QuickActionCell: View {
     let index: Int
     let item: NSMenuItem
     let primary: Bool
+    let highlight: Namespace.ID
     @FocusState private var focused: Bool
     private var selected: Bool { model.selectedIndex == index }
     private var shortcut: String {
@@ -209,11 +216,22 @@ private struct QuickActionCell: View {
                 Text(item.title).font(.system(size: primary ? 13 : 12, weight: primary ? .semibold : .regular))
                     .foregroundStyle(SettingsTheme.ink)
                 Spacer(minLength: 8)
-                Text(shortcut).font(.system(size: 11)).foregroundStyle(SettingsTheme.muted).accessibilityHidden(true)
+                if !shortcut.isEmpty {
+                    Text(shortcut).font(.system(size: 10, weight: .medium)).monospaced()
+                        .foregroundStyle(SettingsTheme.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 3)
+                        .background(SettingsTheme.inset, in: RoundedRectangle(cornerRadius: 4))
+                        .accessibilityHidden(true)
+                }
             }
-            .padding(.horizontal, 10).frame(height: primary ? 42 : SettingsTheme.rowHeight)
-            .background(selected ? SettingsTheme.selected : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 9))
+            .padding(.horizontal, 10).frame(height: primary ? 40 : SettingsTheme.rowHeight)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 8).fill(SettingsTheme.selected)
+                        .matchedGeometryEffect(id: "menuSelection", in: highlight)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(SoftPressButtonStyle())
         .disabled(!item.isEnabled).opacity(item.isEnabled ? 1 : 0.4)

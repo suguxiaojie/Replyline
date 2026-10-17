@@ -258,11 +258,7 @@ struct CardPreviewView: View {
                         if model.selectedText != selected { model.selectedText = selected }
                     }, close: close)
                 } else if let image = model.image {
-                    ScrollView([.horizontal, .vertical]) {
-                        Image(nsImage: image).resizable().interpolation(.high)
-                            .frame(width: model.naturalSize.width * scale, height: model.naturalSize.height * scale)
-                    }
-                    .id(scale)
+                    SelectablePreviewImage(image: image, naturalSize: model.naturalSize, scale: scale) { zoom = $0 }
                     HStack(spacing: 10) {
                         Button { zoom = max(0.01, scale / 1.25) } label: { Image(systemName: "minus.magnifyingglass") }
                         Text("\(Int((scale * 100).rounded()))%").monospacedDigit().frame(width: 48)

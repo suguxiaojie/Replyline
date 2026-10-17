@@ -268,14 +268,14 @@ final class VideoLibraryTests: XCTestCase {
         try await MainActor.run {
             _ = NSApplication.shared
             let model = LibraryModel(folder: store.folder)
-            @MainActor func render(_ view: AnyView, name: String, size: NSSize, appear: Bool = false) throws {
-                let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor))
-                    .environment(\.colorScheme, .dark))
+            @MainActor func render(_ view: AnyView, name: String, size: NSSize, scheme: ColorScheme = .dark, appear: Bool = false) throws {
+                let host = NSHostingView(rootView: view.background(AppTheme.panel)
+                    .environment(\.colorScheme, scheme))
                 host.frame = NSRect(origin: .zero, size: size)
                 let panel = NSPanel(contentRect: NSRect(origin: NSPoint(x: -12000, y: -12000), size: size),
                                     styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
                 panel.isReleasedWhenClosed = false
-                panel.appearance = NSAppearance(named: .darkAqua)
+                panel.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                 panel.contentView = host
                 defer { panel.close() }
                 if appear { panel.orderFront(nil); RunLoop.main.run(until: Date().addingTimeInterval(0.8)) }
@@ -286,9 +286,18 @@ final class VideoLibraryTests: XCTestCase {
                 try data.write(to: output.appendingPathComponent(name))
                 XCTAssertGreaterThan(data.count, 2000)
             }
-            try render(AnyView(LibraryView(model: model, close: {})), name: "library-780.png", size: NSSize(width: 780, height: 580))
-            try render(AnyView(LibraryView(model: model, close: {})), name: "library-620.png", size: NSSize(width: 620, height: 460))
-            try render(AnyView(VideoEditorView(model: model, card: card, source: nil)), name: "video-editor.png", size: NSSize(width: 500, height: 560))
+            for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
+                for width in [620, 780] {
+                    for layout in [LibraryLayout.compact, .grid] {
+                        try render(AnyView(LibraryView(model: model, close: {}, layout: layout)), name: "library-\(name)-\(width)-\(layout.rawValue).png", size: NSSize(width: width, height: 580), scheme: scheme)
+                    }
+                }
+                for kind in [LibraryKind.text, .image] {
+                    let material = try XCTUnwrap(model.cards.first { $0.kind == kind })
+                    try render(AnyView(LibraryEditorView(model: model, card: material, source: nil)), name: "\(kind.rawValue)-editor-\(name).png", size: NSSize(width: 500, height: 700), scheme: scheme, appear: true)
+                }
+                try render(AnyView(VideoEditorView(model: model, card: card, source: nil)), name: "video-editor-\(name).png", size: NSSize(width: 500, height: 700), scheme: scheme, appear: true)
+            }
             let line = Line(library: model, defaults: VideoDefaults(), breeze: false)
             line.revealed = true
             try render(AnyView(LineView(line: line)), name: "line-video.png", size: NSSize(width: 1000, height: Layout.panelHeight), appear: true)

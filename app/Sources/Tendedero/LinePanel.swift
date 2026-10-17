@@ -6,6 +6,7 @@ import AppKit
 final class LinePanel: NSPanel, NSDraggingDestination {
     weak var line: Line?
     private var lastDragUpdate: TimeInterval?
+    private var landingID: UUID?
     init(content: NSView) {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: false)
@@ -92,13 +93,23 @@ final class LinePanel: NSPanel, NSDraggingDestination {
                               width: size.width, height: size.height)
                 .insetBy(dx: -CardDragPreview.margin, dy: -CardDragPreview.margin)
             let landing = host.convert(rect, from: nil)
-            let preview = (sender.draggingSource as? GrabView)?.liftedDragImage ?? CardDragPreview.image(for: card.thumb)
+            let preview = (sender.draggingSource as? GrabView)?.liftedDragImage ?? CardDragPreview.image(for: card)
             sender.enumerateDraggingItems(options: [], for: host, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
                 item.setDraggingFrame(landing, contents: preview)
             }
         }
         lastDragUpdate = nil
-        return line.commitReordering(id)
+        let accepted = line.commitReordering(id)
+        if accepted { landingID = id; line.awaitReorderLanding(id) }
+        return accepted
+    }
+
+    func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
+        guard let id = landingID else { return }
+        landingID = nil
+        line?.completeReorderLanding(id)
+        contentView?.layoutSubtreeIfNeeded()
+        contentView?.displayIfNeeded()
     }
 
     /// The line hangs on the screen you are using, which is the one with the

@@ -93,14 +93,14 @@ struct LineView: View {
             }
             .animation(line.draggingID != nil || line.settlingID != nil
                        ? (reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.88))
-                       : .spring(response: 0.55, dampingFraction: 0.78), value: line.items.map(\.id))
+                       : (reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.78)), value: line.items.map(\.id))
             .animation(line.draggingID != nil && !reduceMotion ? .linear(duration: 0.1) : nil, value: line.scroll)
             .animation(.easeInOut(duration: 0.3), value: line.items.isEmpty)
             // Tucked away, the whole line waits above the top edge and slides
             // out from under the menu bar, the way an auto-hiding Dock does.
             .offset(y: line.revealed ? 0 : -(Layout.panelHeight + 12))
-            .animation(line.revealed ? .spring(response: 0.42, dampingFraction: 0.82)
-                                     : .easeIn(duration: 0.22), value: line.revealed)
+            .animation(reduceMotion ? nil : (line.revealed ? .spring(response: 0.42, dampingFraction: 0.82)
+                                     : .easeIn(duration: 0.22)), value: line.revealed)
         }
         .onPreferenceChange(HitRectsKey.self) { rects in
             line.hitRects = rects

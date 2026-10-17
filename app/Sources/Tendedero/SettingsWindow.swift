@@ -21,6 +21,15 @@ enum SettingsPage: String, CaseIterable {
         case .general: "gearshape"
         }
     }
+
+    var subtitle: String {
+        switch self {
+        case .line: "选择晾衣架的展开方式与卡片显示。"
+        case .images: "管理截图来源、图片收集与临时卡片。"
+        case .shortcuts: "设置常用操作的按键组合。"
+        case .general: "管理启动方式与交互反馈。"
+        }
+    }
 }
 
 struct SettingsSnapshot {
@@ -89,7 +98,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
     @discardableResult func makeWindow() -> NSWindow {
         if let window { return window }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 570),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Replyline 设置"
         window.titleVisibility = .hidden
@@ -120,11 +129,14 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
-                    Image(systemName: "tshirt").font(.system(size: 17)).foregroundStyle(SettingsTheme.secondary).accessibilityHidden(true)
-                    Text("Replyline").font(.system(size: 15, weight: .semibold))
+                    Image(systemName: "tshirt").font(.system(size: 20, weight: .light)).foregroundStyle(SettingsTheme.accent).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Replyline").font(.system(size: 14, weight: .semibold))
+                        Text("偏好设置").font(.system(size: 11)).foregroundStyle(SettingsTheme.secondary)
+                    }
                 }
-                .padding(.horizontal, 18).padding(.top, 43).padding(.bottom, 24)
-                VStack(spacing: 5) {
+                .padding(.horizontal, 20).padding(.top, 44).padding(.bottom, 25)
+                VStack(spacing: 4) {
                     ForEach(SettingsPage.allCases, id: \.self) { page in
                         SettingsNavigationRow(page: page, selected: model.page == page, navigation: navigation) {
                             model.selectPage(page)
@@ -132,22 +144,25 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 1), value: model.page)
+                .animation(reduceMotion ? nil : AppMotion.control, value: model.page)
                 Spacer()
-                Text("设置自动保存")
+                Label("更改自动保存", systemImage: "checkmark.circle")
                     .font(.system(size: 11)).foregroundStyle(SettingsTheme.muted)
                     .padding(.horizontal, 18).padding(.bottom, 18)
             }
-            .frame(width: 176)
+            .frame(width: 188)
             .frame(maxHeight: .infinity)
             .background(SidebarMaterial())
-            Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 0.5)
+            Rectangle().fill(SettingsTheme.line).frame(width: 0.5)
             ZStack(alignment: .topLeading) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text(model.page.title)
-                            .font(.system(size: 22, weight: .semibold)).tracking(-0.2)
-                            .foregroundStyle(SettingsTheme.ink).padding(.bottom, 6)
+                    VStack(alignment: .leading, spacing: 22) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(model.page.title)
+                                .font(.system(size: 21, weight: .semibold)).tracking(-0.3)
+                                .foregroundStyle(SettingsTheme.ink)
+                            Text(model.page.subtitle).font(.system(size: 12)).foregroundStyle(SettingsTheme.secondary)
+                        }.padding(.bottom, 2)
                         switch model.page {
                         case .line: lineSettings
                         case .images: imageSettings
@@ -155,17 +170,19 @@ struct SettingsView: View {
                         case .general: generalSettings
                         }
                     }
-                    .padding(.horizontal, 24).padding(.top, 43).padding(.bottom, 24)
+                    .padding(.horizontal, 26).padding(.top, 44).padding(.bottom, 28)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .id(model.page)
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 10)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(reduceTransparency ? SettingsTheme.panel : .clear)
-            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.34, dampingFraction: 1), value: model.page)
+            .background(SettingsTheme.panel.opacity(reduceTransparency ? 1 : 0.98))
+            .animation(reduceMotion ? nil : AppMotion.panel, value: model.page)
         }
         .font(.system(size: 13)).foregroundStyle(SettingsTheme.ink)
+        .tint(SettingsTheme.accent)
+        .buttonStyle(SettingsButtonStyle())
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -189,7 +206,8 @@ struct SettingsView: View {
                     SettingsRule()
                     SettingsRow(title: "辅助功能权限", subtitle: state.accessibility ? "已开启，可识别菜单栏空白处" : "开启后可识别菜单栏空白处") {
                         if state.accessibility {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("已授权")
+                            Label("已开启", systemImage: "checkmark.circle")
+                                .font(.system(size: 11, weight: .medium)).foregroundStyle(SettingsTheme.secondary).accessibilityLabel("已授权")
                         } else {
                             Button("去开启…") { model.onCommand(.accessibility) }
                         }
@@ -197,7 +215,7 @@ struct SettingsView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1), value: state.trigger)
+            .animation(reduceMotion ? nil : AppMotion.panel, value: state.trigger)
             SettingsCard(title: "自动展开", footer: "加入新截图、剪贴板图片或置顶素材时短暂展开，与手动触发方式独立。") {
                 SettingsSwitch(title: "新卡片加入时自动展开", value: model.binding(\.peeksAtNew, command: SettingsCommand.peek))
             }
@@ -227,10 +245,8 @@ struct SettingsView: View {
                          "系统截图保存到 Replyline，并关闭系统浮动缩略图。关闭此选项或正常退出后恢复原设置。" :
                          "继续使用系统的保存位置，Replyline 收集该目录中的新截图。") {
                 SettingsRow(title: "保存方式") {
-                    Picker("保存方式", selection: model.binding(\.inbox, command: SettingsCommand.inbox)) {
-                        Text("系统位置").tag(false)
-                        Text("Replyline").tag(true)
-                    }.labelsHidden().pickerStyle(.segmented).frame(width: 218)
+                    GlassSegmentedControl(title: "保存方式", options: [("系统位置", false), ("Replyline", true)],
+                                          selection: model.binding(\.inbox, command: SettingsCommand.inbox)).frame(width: 218)
                 }
                 SettingsRule()
                 SettingsRow(title: "当前截图文件夹", subtitle: state.screenshotFolder.path) {
@@ -312,16 +328,19 @@ private struct SettingsNavigationRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: page.icon).font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(selected ? Color.white : SettingsTheme.secondary)
+                    .foregroundStyle(selected ? SettingsTheme.accent : SettingsTheme.secondary)
                     .frame(width: 24, height: 26).accessibilityHidden(true)
                 Text(page.title).font(.system(size: 13, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? Color.white : SettingsTheme.ink)
+                    .foregroundStyle(SettingsTheme.ink)
                 Spacer(minLength: 0)
+                if selected {
+                    Circle().fill(SettingsTheme.accent).frame(width: 4, height: 4).accessibilityHidden(true)
+                }
             }
             .padding(.horizontal, 9).padding(.vertical, 7)
             .background {
                 if selected {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(SettingsTheme.accent)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SettingsTheme.selected)
                         .matchedGeometryEffect(id: "selectedPage", in: navigation)
                 } else if hovered {
                     RoundedRectangle(cornerRadius: 9, style: .continuous).fill(SettingsTheme.inset)
@@ -343,6 +362,6 @@ struct SoftPressButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(reduceMotion || !configuration.isPressed ? 1 : 0.985)
-            .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.85), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : AppMotion.control, value: configuration.isPressed)
     }
 }

@@ -6,8 +6,8 @@ cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
 APP="${REPLYLINE_APP_OUTPUT:-build/Replyline.app}"
-VERSION="${REPLYLINE_VERSION:-0.3.6}"
-BUILD_NUMBER="${REPLYLINE_BUILD_NUMBER:-23}"
+VERSION="${REPLYLINE_VERSION:-0.3.10}"
+BUILD_NUMBER="${REPLYLINE_BUILD_NUMBER:-27}"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version" >&2; exit 1; }
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "Invalid build number" >&2; exit 1; }
 
@@ -54,6 +54,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Replyline"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
+cp -R ThirdPartyNotices "$APP/Contents/Resources/ThirdPartyNotices"
 
 # Icon
 WORK="$(mktemp -d ../.tmp/build/icon.XXXXXX)"

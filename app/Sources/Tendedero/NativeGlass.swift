@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 enum NativeGlass {
-    /// Uses the same clear glass + neutral chrome composition as Codex Monitor.
+    /// Native glass edge with a readable CDS surface behind the controls.
     static func host<Content: View>(_ content: Content, material: NSVisualEffectView.Material,
                                     cornerRadius: CGFloat = 18) -> NativeGlassSurface {
         let host = NSHostingView(rootView: content)
@@ -41,6 +41,12 @@ final class NativeGlassSurface: NSView {
 
     override var isOpaque: Bool { false }
     override func layout() { super.layout(); surface.frame = bounds }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            surface?.layer?.backgroundColor = SettingsTheme.backdrop(light: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua).cgColor
+        }
+    }
 
     private func installSurface() {
         content.removeFromSuperview()
@@ -49,7 +55,7 @@ final class NativeGlassSurface: NSView {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
             let solid = NSView(frame: bounds)
             solid.wantsLayer = true
-            solid.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            solid.layer?.backgroundColor = SettingsTheme.backdrop(light: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua).cgColor
             solid.addSubview(content)
             content.frame = solid.bounds
             content.autoresizingMask = [.width, .height]
@@ -116,7 +122,7 @@ private final class GlassChrome: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let light = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
         let shape = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
-        (light ? NSColor.white : NSColor.black).withAlphaComponent(light ? 0.90 : 0.88).setFill()
+        SettingsTheme.backdrop(light: light).withAlphaComponent(0.97).setFill()
         shape.fill()
         (light ? NSColor.black : NSColor.white).withAlphaComponent(0.09).setStroke()
         shape.lineWidth = 0.5

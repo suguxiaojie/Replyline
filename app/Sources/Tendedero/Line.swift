@@ -86,7 +86,11 @@ final class Line: ObservableObject {
     private var reorderOrder: [String]?
     private var reorderScroll: CGFloat = 0
     private var grabOffset: CGFloat = 0
-    private var settlingToken = UUID()
+    private(set) var settlingToken = UUID()
+    private var landingID: UUID?
+    private var copiedToken = UUID()
+    private var lastInteraction = ProcessInfo.processInfo.systemUptime
+    var hoveredID: UUID?
     private let defaults: UserDefaults
     private let library: LibraryModel?
 
@@ -180,6 +184,9 @@ final class Line: ObservableObject {
         guard let i = items.firstIndex(where: { $0.id == id }), !items[i].falling else { return }
         onFall?(items[i])
         items[i].falling = true
+        if settlingID == id { settlingToken = UUID(); settlingID = nil }
+        if landingID == id { landingID = nil }
+        if hoveredID == id { hoveredID = nil }
         hitRects[id] = nil
         save()
         if !quietly { play("Pop", volume: 0.25) }
@@ -226,6 +233,7 @@ final class Line: ObservableObject {
     // MARK: Actions on one photo
 
     func copy(_ id: UUID) {
+        noteInteraction()
         guard let item = items.first(where: { $0.id == id }) else { return }
         if let card = item.libraryCard {
             guard library?.copy(card.id, returnToChat: false) == true else { return }
@@ -243,10 +251,12 @@ final class Line: ObservableObject {
         showCopied(id)
     }
 
-    private func showCopied(_ id: UUID) {
+    func showCopied(_ id: UUID) {
         copiedID = id
+        let token = UUID()
+        copiedToken = token
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            if self?.copiedID == id { self?.copiedID = nil }
+            if self?.copiedID == id && self?.copiedToken == token { self?.copiedID = nil }
         }
     }
 
@@ -302,6 +312,7 @@ final class Line: ObservableObject {
     /// of that folder. If the Trash refuses it, it still leaves the line.
     /// Moves along a line that holds more than fit, from a scroll gesture.
     func scroll(by delta: CGFloat) {
+        if delta != 0 { noteInteraction() }
         let most = CGFloat(max(0, items.count - visibleCount)) * Layout.spacing
         let next = min(most, max(0, scroll + delta))
         if next != scroll { scroll = next }
@@ -333,6 +344,8 @@ final class Line: ObservableObject {
         grabOffset = pointerX - Layout.x(index: index, count: items.count, width: width,
                                         visible: visibleCount, scroll: scroll, fixedCards: hasLibraryItems)
         draggingID = id
+        noteInteraction()
+        landingID = nil
         settlingToken = UUID()
         settlingID = nil
     }
@@ -381,20 +394,33 @@ final class Line: ObservableObject {
         return true
     }
 
+    func awaitReorderLanding(_ id: UUID) {
+        guard draggingID == id, reorderOrder == nil else { return }
+        landingID = id
+    }
+
     func finishReordering(_ id: UUID) {
-        guard draggingID == id else { return }
+        guard draggingID == id, landingID != id else { return }
         leaveReordering()
         reorderOrder = nil
         // Let the returned card settle into the jaws before closing them.
         // Keep this separate from the system drag, which has already ended.
-        settlingID = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : id
+        settlingToken = UUID()
+        settlingID = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && items.contains(where: { $0.id == id && !$0.falling }) ? id : nil
         draggingID = nil
-        let token = UUID()
-        settlingToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { [weak self] in
-            guard let self, self.settlingToken == token, self.settlingID == id, self.draggingID != id else { return }
-            self.settlingID = nil
-        }
+    }
+
+    /// AppKit calls this once the accepted drag image has reached its frame.
+    func completeReorderLanding(_ id: UUID) {
+        guard landingID == id else { return }
+        landingID = nil
+        finishReordering(id)
+    }
+
+    /// The card's return animation owns this completion, not a delay timer.
+    func completeSettling(_ id: UUID, token: UUID) {
+        guard settlingID == id, settlingToken == token, draggingID != id else { return }
+        settlingID = nil
     }
 
     /// Reorder surviving known cards only. Concurrent arrivals retain their
@@ -495,9 +521,20 @@ final class Line: ObservableObject {
     private func scheduleGust() {
         DispatchQueue.main.asyncAfter(deadline: .now() + .random(in: 7...16)) { [weak self] in
             guard let self else { return }
-            if !self.items.isEmpty && self.draggingID == nil { self.gust += 1 }
+            if self.shouldBreeze(at: ProcessInfo.processInfo.systemUptime),
+               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { self.gust += 1 }
             self.scheduleGust()
         }
+    }
+
+    func noteInteraction(at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        if time.isFinite { lastInteraction = time }
+    }
+
+    func shouldBreeze(at time: TimeInterval) -> Bool {
+        time.isFinite && time - lastInteraction >= 30 && revealed && liveCount > 0
+            && draggingID == nil && settlingID == nil && pressedID == nil
+            && previewedID == nil && hoveredID == nil && !GrabView.isShowingMenu
     }
 
     // MARK: Persistence

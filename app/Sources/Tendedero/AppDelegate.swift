@@ -321,12 +321,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // was taken on. On a full line the oldest photo then falls in view as
         // the new one flies in.
         comeDown(on: screen)
-        guard let id = line.hang(url, flying: from != nil) else {
+        let animated = from != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard let id = line.hang(url, flying: animated) else {
             // Nothing hung after all, so an empty line goes away again.
             itemsChanged()
             return
         }
-        guard let from else { return }
+        guard let from, animated else { return }
         // Let the line come down and lay out before measuring the landing spot.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
             self?.fly(id, from: from)
@@ -357,7 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func fall(_ item: Pegged) {
         guard isPresent, isRevealed, !item.flying, let screen = panel.screen,
               let card = cardFrame(for: item.id),
-              let image = item.thumb.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+              let image = CardDragPreview.face(for: item).cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         CaptureFlight.fall(image: image, card: card, tilt: CGFloat(item.tilt), on: screen)
     }
 
@@ -577,7 +578,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let inside = NSMouseInRect(mouse, zone, false)
         if inside && pinned { pinned = false }
 
-        let busy = pinned || GrabView.isDragging || GrabView.isShowingMenu
+        let busy = pinned || GrabView.isDragging || GrabView.isShowingMenu || line.draggingID != nil || line.settlingID != nil
             || line.pressedID != nil || now < peekUntil || cardPreview.keepsLineOpen
         if inside || busy {
             awaySince = nil

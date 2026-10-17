@@ -218,21 +218,31 @@ final class SettingsTests: XCTestCase {
             model.snapshot.screenshotFolder = URL(fileURLWithPath: "/Users/demo/Library/Application Support/Replyline/Screenshots")
             model.snapshot.extraFolders = [URL(fileURLWithPath: "/Users/demo/Pictures/客服截图")]
             model.onCommand = { _ in XCTFail("Rendering must not apply settings") }
-            for page in SettingsPage.allCases {
+            for (name, scheme, appearance) in [("light", ColorScheme.light, NSAppearance.Name.aqua),
+                                               ("dark", ColorScheme.dark, NSAppearance.Name.darkAqua)] {
+              for narrow in [false, true] {
+               for page in SettingsPage.allCases {
                 model.page = page
-                let host = NSHostingView(rootView: SettingsView(model: model).background(SettingsTheme.panel))
-                host.frame = NSRect(x: 0, y: 0, width: 760, height: 570)
-                let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 760, height: 570),
+                model.snapshot.trigger = narrow ? .doubleClick : .hover
+                model.snapshot.accessibility = narrow
+                let size = narrow ? NSSize(width: 730, height: 530) : NSSize(width: 800, height: 600)
+                let host = NSHostingView(rootView: SettingsView(model: model).background(SettingsTheme.panel)
+                    .environment(\.colorScheme, scheme))
+                host.frame = NSRect(origin: .zero, size: size)
+                let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -10000, y: -10000), size: size),
                                       styleMask: [.titled], backing: .buffered, defer: false)
                 window.isReleasedWhenClosed = false
+                window.appearance = NSAppearance(named: appearance)
                 window.contentView = host
                 host.layoutSubtreeIfNeeded()
                 let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
                 host.cacheDisplay(in: host.bounds, to: bitmap)
                 let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
                 XCTAssertGreaterThan(data.count, 5000)
-                try data.write(to: directory.appendingPathComponent("\(page.rawValue).png"))
+                try data.write(to: directory.appendingPathComponent("\(page.rawValue)-\(name)-\(narrow ? "narrow" : "regular").png"))
                 window.close()
+               }
+              }
             }
         }
     }

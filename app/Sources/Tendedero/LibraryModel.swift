@@ -6,6 +6,9 @@ final class LibraryModel: ObservableObject {
     @Published private(set) var cards: [LibraryCard] = []
     @Published var error: String?
     @Published var editingID: UUID?
+    @Published private(set) var videoInfo: [String: VideoInfo] = [:]
+    var copyPasteboard: NSPasteboard = .general
+    var previewFile: (URL) -> Void = { QuickLook.shared.show([$0], at: 0) }
     private(set) var repository: LibraryRepository?
     var onChange: () -> Void = {}
     var onCopy: () -> Void = {}
@@ -67,8 +70,9 @@ final class LibraryModel: ObservableObject {
     }
 
     @discardableResult
-    func copy(_ id: UUID, returnToChat: Bool = true, pasteboard pb: NSPasteboard = .general) -> Bool {
+    func copy(_ id: UUID, returnToChat: Bool = true, pasteboard: NSPasteboard? = nil) -> Bool {
         guard let card = repository?.find(id) else { return false }
+        let pb = pasteboard ?? copyPasteboard
         if card.kind == .text {
             pb.clearContents()
             guard pb.setString(card.text, forType: .string) else { return false }
@@ -94,6 +98,21 @@ final class LibraryModel: ObservableObject {
         }
         if returnToChat { onCopy() }
         return true
+    }
+
+    func preview(_ id: UUID) {
+        guard let card = repository?.find(id), let url = assetURL(card),
+              FileManager.default.fileExists(atPath: url.path) else {
+            error = "素材文件无法读取，请检查文件后重试。"; return
+        }
+        previewFile(url)
+    }
+
+    func loadVideoInfo(_ card: LibraryCard) async {
+        guard card.kind == .video, videoInfo[card.asset] == nil, let url = assetURL(card) else { return }
+        guard let info = try? await VideoInfo.read(url), !Task.isCancelled,
+              cards.contains(where: { $0.id == card.id && $0.asset == card.asset }) else { return }
+        videoInfo[card.asset] = info
     }
 
     private func refresh() {

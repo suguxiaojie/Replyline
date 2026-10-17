@@ -9,11 +9,17 @@ struct PeggedView: View {
     @State private var swing: Double = 0
     @State private var arrived = false
     @State private var hovering = false
+    @State private var lifted = false
+    @State private var cornerPressed: GrabView.CornerAction?
+    @State private var returnToken: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var copied: Bool { line.copiedID == item.id }
     private var dragging: Bool { line.draggingID == item.id }
     private var pressed: Bool { line.pressedID == item.id }
+    private enum Phase: Equatable { case resting, dragging, settling }
+    private var phase: Phase { dragging ? .dragging : (line.settlingID == item.id ? .settling : .resting) }
+    private var holding: Bool { phase != .resting }
 
     var body: some View {
         VStack(spacing: -12) {
@@ -21,7 +27,6 @@ struct PeggedView: View {
                 .zIndex(1)
             card
         }
-        .rotationEffect(.degrees(swing + item.tilt), anchor: .top)
         .offset(y: arrived ? 0 : -46)
         // The fall itself is drawn over the whole screen by CaptureFlight, so
         // the card here just steps aside at once.
@@ -31,34 +36,36 @@ struct PeggedView: View {
         .onAppear(perform: arrive)
         .onChange(of: item.flying) { was, now in if was && !now { land() } }
         .onChange(of: line.gust) { _, _ in breeze() }
-        .onChange(of: copied) { _, isCopied in if isCopied { nudge(3) } }
+        .onChange(of: phase, initial: true) { _, value in transition(to: value) }
+        .onDisappear {
+            if line.hoveredID == item.id { line.hoveredID = nil }
+            if let returnToken { line.completeSettling(item.id, token: returnToken) }
+        }
+        .onChange(of: reduceMotion) { _, reduced in
+            if reduced {
+                withTransaction(Transaction(animation: nil)) { swing = 0; arrived = true; lifted = false }
+                line.completeSettling(item.id, token: line.settlingToken)
+            }
+        }
     }
 
     /// The photo fits inside the card area keeping its proportions, so the
     /// white border hugs it whether the screenshot is wide or tall.
     static func photoSize(for size: CGSize) -> CGSize {
-        let maxW = Layout.cardWidth - 14, maxH = Layout.photoMaxHeight
-        guard size.width > 0, size.height > 0 else { return CGSize(width: maxW, height: maxH) }
-        let scale = min(maxW / size.width, maxH / size.height)
-        return CGSize(width: size.width * scale, height: size.height * scale)
+        CardGeometry.photo(size, maxWidth: Layout.cardWidth - 14, maxHeight: Layout.photoMaxHeight)
     }
 
     /// The card around the photo: the photo plus the glass inset.
     static func cardSize(for size: CGSize) -> CGSize {
         let p = photoSize(for: size)
-        return CGSize(width: p.width + Frame.inset * 2, height: p.height + Frame.inset * 2)
+        return CardGeometry.shell(photo: p)
     }
 
     /// Distance from the top of the hanging view (the clip) to the card.
     static let cardOffsetBelowTop: CGFloat = 26 - 12
 
-    private var photoSize: CGSize { Self.photoSize(for: item.thumb.size) }
-
     private var card: some View {
-        Image(nsImage: item.thumb)
-            .resizable()
-            .interpolation(.high)
-            .frame(width: photoSize.width, height: photoSize.height)
+        LineCardFace(item: item)
             // Concentric corners: the photo's radius is the frame's minus the
             // inset, the way macOS rounds nested shapes.
             .clipShape(RoundedRectangle(cornerRadius: Frame.radius - Frame.inset, style: .continuous))
@@ -73,8 +80,9 @@ struct PeggedView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.primary)
                         .frame(width: 28, height: 28)
-                        .glassFrame(circle: true)
+                        .cardControl()
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(Frame.inset)
@@ -82,14 +90,12 @@ struct PeggedView: View {
             .shadow(color: .black.opacity(hovering ? 0.26 : 0.18), radius: hovering ? 14 : 10, y: hovering ? 8 : 5)
             // Holding presses the photo in slowly, so a long press feels like
             // it is building up to something.
-            .scaleEffect(dragging ? 0.98 : (pressed ? 0.95 : (hovering ? 1.035 : 1)), anchor: .top)
-            .animation(pressed ? .easeInOut(duration: 0.45) : .spring(response: 0.3, dampingFraction: 0.6), value: pressed)
+            .scaleEffect(reduceMotion ? 1 : (holding ? 1 : (pressed ? 0.975 : (hovering ? 1.02 : 1))), anchor: .top)
+            .animation(reduceMotion ? nil : (pressed ? .easeInOut(duration: 0.45) : AppMotion.control), value: pressed)
             // The open clip stays on the rope as a landing place. The card
             // steps away from its jaws while the system drag follows the hand.
-            .offset(y: dragging && !reduceMotion ? 8 : 0)
+            .offset(y: lifted && !reduceMotion ? 8 : 0)
             .opacity(dragging ? 0.22 : 1)
-            .animation(reduceMotion ? nil : (dragging ? .easeOut(duration: 0.16)
-                                                   : .spring(response: 0.26, dampingFraction: 0.86)), value: dragging)
             .overlay(alignment: .topLeading) {
                 // Drawn here, clicked through GrabView, which sits on top. A
                 // cross sends a file in Tendedero's folder to the Trash; for a
@@ -98,20 +104,21 @@ struct PeggedView: View {
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(.primary)
                     .frame(width: 20, height: 20)
-                    .glassFrame(circle: true)
+                    .cardControl()
                     .padding(3)
-                    .opacity(hovering && !dragging ? 1 : 0)
-                    .scaleEffect(hovering ? 1 : 0.6)
+                    .opacity(hovering && !holding ? 1 : 0)
+                    .scaleEffect(reduceMotion ? 1 : (cornerPressed == .discard ? 0.9 : 1))
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
-            .overlay(GrabArea(item: item, line: line))
+            .overlay(GrabArea(item: item, line: line, discardVisible: hovering && !holding, onCornerPress: { cornerPressed = $0 }))
             .overlay(alignment: .bottomLeading) {
                 if item.isLibraryItem {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(AppTheme.accent)
                         .frame(width: 16, height: 16)
-                        .glassFrame(circle: true)
+                        .cardControl(active: true)
                         .padding(3)
                         .allowsHitTesting(false)
                         .accessibilityLabel("固定素材")
@@ -120,28 +127,39 @@ struct PeggedView: View {
             .overlay(alignment: .topTrailing) {
                 Image(systemName: line.previewedID == item.id ? "eye.fill" : "eye")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .frame(width: min(20, max(10, (Self.cardSize(for: item.thumb.size).width - 6) / 2)), height: 20)
-                    .glassFrame(circle: true)
+                    .foregroundStyle(line.previewedID == item.id ? AppTheme.accent : Color.primary)
+                    .frame(width: 20, height: 20)
+                    .cardControl(active: line.previewedID == item.id)
                     .padding(3)
                     .opacity(dragging ? 0 : 1)
+                    .scaleEffect(reduceMotion || cornerPressed != .preview ? 1 : 0.9)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             .overlay(alignment: .bottom) {
                 if copied {
-                    Label(L("Copied"), systemImage: "checkmark")
+                    Label { Text(L("Copied")) } icon: { Image(systemName: "checkmark").foregroundStyle(AppTheme.accent) }
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .glassFrame(capsule: true)
+                        .background(.regularMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.09), lineWidth: 0.5))
                         .offset(y: 16)
-                        .transition(.opacity.combined(with: .offset(y: -4)))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4)))
                 }
             }
-            .animation(.easeOut(duration: 0.18), value: hovering)
+            .animation(reduceMotion ? nil : AppMotion.control, value: hovering)
+            .animation(reduceMotion ? nil : AppMotion.control, value: cornerPressed)
             .animation(.easeOut(duration: 0.2), value: copied)
-            .onHover { hovering = $0 }
+            .onHover { inside in
+                hovering = inside
+                if inside { line.hoveredID = item.id }
+                else if line.hoveredID == item.id { line.hoveredID = nil }
+                line.noteInteraction()
+            }
+            .rotationEffect(.degrees(holding ? 0 : swing + item.tilt), anchor: .top)
+            .animation(reduceMotion ? nil : AppMotion.control, value: holding)
             .background(
                 GeometryReader { g in
                     Color.clear.preference(key: HitRectsKey.self,
@@ -150,7 +168,26 @@ struct PeggedView: View {
             )
     }
 
+    private func transition(to phase: Phase) {
+        switch phase {
+        case .dragging:
+            returnToken = nil
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) { lifted = true }
+        case .settling:
+            let token = line.settlingToken
+            returnToken = token
+            withAnimation(reduceMotion ? nil : AppMotion.panel, completionCriteria: .removed) {
+                lifted = false
+            } completion: {
+                line.completeSettling(item.id, token: token)
+            }
+        case .resting:
+            withTransaction(Transaction(animation: nil)) { lifted = false }
+        }
+    }
+
     private func arrive() {
+        if reduceMotion { arrived = true; swing = 0; return }
         // A capture that flew in is already in place; the flight did the arriving.
         if item.flying {
             arrived = true
@@ -167,15 +204,19 @@ struct PeggedView: View {
     }
 
     private func breeze() {
+        guard !reduceMotion else { return }
         let delay = Double.random(in: 0...0.35)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
             nudge(Double.random(in: 1.6...3.4))
         }
     }
 
     private func nudge(_ degrees: Double) {
+        guard !reduceMotion else { return }
         withAnimation(.easeOut(duration: 0.3)) { swing = degrees }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { swing = 0; return }
             withAnimation(.interpolatingSpring(stiffness: 38, damping: 2.4)) { swing = 0 }
         }
     }
@@ -187,6 +228,12 @@ enum Frame {
 }
 
 extension View {
+    func cardControl(active: Bool = false) -> some View {
+        background(active ? AppTheme.selected : .clear, in: Circle())
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay(Circle().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+    }
+
     /// A crisp glass: the system's blurred material with a thin specular
     /// edge, lit from above. No refraction, so the background stays sharp
     /// around the frame instead of bending like gel.

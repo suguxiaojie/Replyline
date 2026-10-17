@@ -271,8 +271,11 @@ final class CardReorderTests: XCTestCase {
         await MainActor.run {
             XCTAssertEqual(fixture.0.draggingID, fixture.1)
             fixture.0.finishReordering(fixture.1)
+            let token = fixture.0.settlingToken
+            fixture.0.completeSettling(fixture.1, token: UUID())
+            XCTAssertEqual(fixture.0.settlingID, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : fixture.1)
+            fixture.0.completeSettling(fixture.1, token: token)
         }
-        try await Task.sleep(nanoseconds: 220_000_000)
         await MainActor.run { XCTAssertNil(fixture.0.settlingID) }
     }
 }

@@ -14,6 +14,8 @@ import SwiftUI
 struct GrabArea: NSViewRepresentable {
     let item: Pegged
     let line: Line
+    var discardVisible = false
+    var onCornerPress: (GrabView.CornerAction?) -> Void = { _ in }
 
     func makeNSView(context: Context) -> GrabView {
         let view = GrabView()
@@ -33,8 +35,25 @@ struct GrabArea: NSViewRepresentable {
         view.copyOnly = item.isLibraryItem
         view.text = item.libraryCard?.kind == .text ? item.libraryCard?.text : nil
         view.dragImage = item.thumb
+        view.dragCard = item
+        view.discardVisible = discardVisible
+        view.onCornerPressChange = onCornerPress
         view.cardID = id
-        view.onClick = { line.copy(id) }
+        view.previewAtCenter = item.isRecording
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.button)
+        view.setAccessibilityLabel(item.libraryCard?.title ?? item.url.deletingPathExtension().lastPathComponent)
+        view.setAccessibilityValue(item.isLibraryItem ? "固定\(item.libraryCard?.kind.label ?? "素材")" : "临时卡片")
+        view.setAccessibilityHelp("点按复制，使用预览操作查看详情。")
+        view.setAccessibilityCustomActions([
+            NSAccessibilityCustomAction(name: item.isRecording ? "播放视频" : "预览") { [weak view] in
+                guard let view else { return false }; view.onPreview(); return true
+            },
+            NSAccessibilityCustomAction(name: item.isLibraryItem ? "从晾衣架取下，保留素材" : "取下卡片") { [weak view] in
+                guard let view else { return false }; view.onDiscard(); return true
+            },
+        ])
+        view.onClick = { line.noteInteraction(); line.copy(id) }
         view.onDoubleClick = { line.open(id) }
         view.onDragStart = { [weak view] in
             guard let view, let window = view.window else { return }
@@ -113,8 +132,11 @@ final class GrabView: NSView, NSDraggingSource {
     var copyOnly = false
     var text: String?
     var dragImage: NSImage?
+    var dragCard: Pegged?
+    var discardVisible = false
     private(set) var liftedDragImage: NSImage?
     var cardID: UUID?
+    var previewAtCenter = false
     private(set) var dragStartX: CGFloat = 0
     var onClick: () -> Void = {}
     var onDoubleClick: () -> Void = {}
@@ -127,41 +149,49 @@ final class GrabView: NSView, NSDraggingSource {
     var onForceClick: () -> Void = {}
     var onPreview: () -> Void = {}
     var onPressChange: (Bool) -> Void = { _ in }
+    var onCornerPressChange: (CornerAction?) -> Void = { _ in }
     var menuProvider: () -> NSMenu = { NSMenu() }
 
     private var downPoint: NSPoint?
     private var startedDrag = false
     private var holdTimer: Timer?
     private var didLongPress = false
+    private var pendingCorner: CornerAction?
+    private var cornerGesture = false
 
     /// How long you hold before Markup opens. Long enough not to fire on a
     /// slow click, short enough to feel deliberate.
     private static let holdDuration: TimeInterval = 0.45
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func accessibilityPerformPress() -> Bool { onClick(); return true }
 
     /// The discard cross drawn in the top left corner of the card. It is
     /// handled here because this view sits on top of the SwiftUI card.
-    static let crossHitSize: CGFloat = 26
+    static let crossHitSize = CardGeometry.corner
 
-    enum CornerAction { case discard, preview }
+    enum CornerAction { case discard, preview, playback }
 
     func cornerAction(at point: NSPoint) -> CornerAction? {
-        let width = min(Self.crossHitSize, bounds.width / 2)
-        let y = isFlipped ? 0 : max(0, bounds.height - Self.crossHitSize)
-        let height = min(Self.crossHitSize, bounds.height)
-        if NSRect(x: 0, y: y, width: width, height: height).contains(point) { return .discard }
-        if NSRect(x: bounds.width - width, y: y, width: width, height: height).contains(point) { return .preview }
+        guard bounds.contains(point) else { return nil }
+        if discardVisible, bounds.width >= CardGeometry.minimum.width,
+           CardGeometry.cornerRect(in: bounds, trailing: false, flipped: isFlipped).contains(point) { return .discard }
+        if CardGeometry.cornerRect(in: bounds, trailing: true, flipped: isFlipped).contains(point) { return .preview }
+        if previewAtCenter, NSRect(x: bounds.midX - 14, y: bounds.midY - 14, width: 28, height: 28).contains(point) { return .playback }
         return nil
     }
 
     override func mouseDown(with event: NSEvent) {
+        pendingCorner = nil
+        cornerGesture = false
         if let corner = cornerAction(at: convert(event.locationInWindow, from: nil)) {
             endPress()
-            downPoint = nil
-            if event.clickCount == 1 {
-                if corner == .discard { onDiscard() } else { onPreview() }
-            }
+            downPoint = event.locationInWindow
+            startedDrag = false
+            didLongPress = false
+            cornerGesture = corner != .playback
+            pendingCorner = event.clickCount == 1 ? corner : nil
+            onCornerPressChange(pendingCorner)
             return
         }
         if event.clickCount == 2 {
@@ -187,7 +217,7 @@ final class GrabView: NSView, NSDraggingSource {
     /// A force click on a trackpad opens Quick Look, as it does in Finder.
     /// It counts instead of the click and of a long press.
     override func pressureChange(with event: NSEvent) {
-        guard event.stage == 2, downPoint != nil, !startedDrag, !didLongPress else { return }
+        guard event.stage == 2, downPoint != nil, !startedDrag, !didLongPress, pendingCorner == nil, !cornerGesture else { return }
         didLongPress = true
         endPress()
         onForceClick()
@@ -200,16 +230,25 @@ final class GrabView: NSView, NSDraggingSource {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if cornerGesture {
+            if cornerAction(at: convert(event.locationInWindow, from: nil)) != pendingCorner {
+                pendingCorner = nil
+                onCornerPressChange(nil)
+            }
+            return
+        }
         guard let start = downPoint, !startedDrag, let url else { return }
         let p = event.locationInWindow
         guard hypot(p.x - start.x, p.y - start.y) > 4, !didLongPress else { return }
         startedDrag = true
+        pendingCorner = nil
+        onCornerPressChange(nil)
         endPress()
 
         let payload: NSPasteboardWriting = text.map { $0 as NSString } ?? (url as NSURL)
         let writer: NSPasteboardWriting = cardID.map { CardDragWriter(id: $0, payload: payload) } ?? payload
         let item = NSDraggingItem(pasteboardWriter: writer)
-        liftedDragImage = dragImage.map(CardDragPreview.image)
+        liftedDragImage = dragCard.map(CardDragPreview.image) ?? dragImage.map(CardDragPreview.image)
         let previewFrame = liftedDragImage == nil ? bounds : bounds.insetBy(dx: -CardDragPreview.margin, dy: -CardDragPreview.margin)
         item.setDraggingFrame(previewFrame, contents: liftedDragImage ?? dragImage)
         dragStartX = start.x
@@ -217,17 +256,30 @@ final class GrabView: NSView, NSDraggingSource {
         onDragStart()
         let session = beginDraggingSession(with: [item], event: event, source: self)
         // Released where nothing accepts it: it flies back to the line.
-        session.animatesToStartingPositionsOnCancelOrFail = true
+        session.animatesToStartingPositionsOnCancelOrFail = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
     override func mouseUp(with event: NSEvent) {
         endPress()
-        if downPoint != nil && !startedDrag && !didLongPress && event.clickCount == 1 { onClick() }
+        let point = convert(event.locationInWindow, from: nil)
+        if downPoint != nil && !startedDrag && !didLongPress && event.clickCount == 1 && bounds.contains(point) {
+            if let corner = pendingCorner, cornerAction(at: point) == corner {
+                if corner == .discard { onDiscard() } else { onPreview() }
+            } else if !cornerGesture && pendingCorner == nil { onClick() }
+        }
+        pendingCorner = nil
+        cornerGesture = false
+        onCornerPressChange(nil)
         downPoint = nil
         didLongPress = false
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        endPress()
+        downPoint = nil
+        pendingCorner = nil
+        cornerGesture = false
+        onCornerPressChange(nil)
         // The menu runs until it closes, and the line stays down meanwhile.
         GrabView.isShowingMenu = true
         NSMenu.popUpContextMenu(menuProvider(), with: event, for: self)

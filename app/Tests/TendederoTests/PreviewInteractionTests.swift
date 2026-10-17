@@ -153,7 +153,7 @@ final class PreviewInteractionTests: XCTestCase {
             XCTAssertEqual(discards, 0)
             XCTAssertEqual(drags, 0)
             view.frame.size.width = 30
-            XCTAssertEqual(view.cornerAction(at: NSPoint(x: 5, y: 90)), .discard)
+            XCTAssertNil(view.cornerAction(at: NSPoint(x: 5, y: 90)))
             XCTAssertEqual(view.cornerAction(at: NSPoint(x: 25, y: 90)), .preview)
             XCTAssertNil(view.cornerAction(at: NSPoint(x: 15, y: 20)))
         }

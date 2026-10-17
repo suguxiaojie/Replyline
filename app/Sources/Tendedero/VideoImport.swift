@@ -3,6 +3,22 @@ import AVFoundation
 import ImageIO
 import UniformTypeIdentifiers
 
+struct VideoInfo: Sendable {
+    let duration: Double
+    let bytes: Int64
+    var summary: String {
+        let seconds = Int(max(0, duration.isFinite ? duration.rounded() : 0))
+        let time = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        return "\(time) · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
+    }
+    static func read(_ url: URL) async throws -> VideoInfo {
+        let bytes = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        let duration = try await AVURLAsset(url: url).load(.duration).seconds
+        try Task.checkCancellation()
+        return VideoInfo(duration: duration, bytes: Int64(bytes))
+    }
+}
+
 /// Keep movie bytes on disk. Validation and poster extraction are async;
 /// importing a large movie never reads its entire contents into memory.
 struct VideoImport: Sendable {

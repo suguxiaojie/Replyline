@@ -5,25 +5,23 @@ struct SidebarMaterial: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        if reduceTransparency { Color(nsColor: .windowBackgroundColor) }
-        else { Color.primary.opacity(0.025) }
+        SettingsTheme.sidebar.opacity(reduceTransparency ? 1 : 0.98)
     }
 }
 
 struct SettingsCard<Content: View>: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var title: String? = nil
     var footer: String? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             if let title {
-                Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(SettingsTheme.secondary).padding(.leading, 3)
+                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(SettingsTheme.secondary).padding(.leading, 2)
             }
             VStack(spacing: 0, content: content)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(reduceTransparency ? SettingsTheme.panel : SettingsTheme.cardFill, in: RoundedRectangle(cornerRadius: SettingsTheme.radius, style: .continuous))
+                .background(SettingsTheme.cardFill, in: RoundedRectangle(cornerRadius: SettingsTheme.radius, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: SettingsTheme.radius).strokeBorder(SettingsTheme.line, lineWidth: 0.5))
             if let footer {
                 Text(footer).font(.system(size: 11)).foregroundStyle(SettingsTheme.muted)
@@ -31,6 +29,22 @@ struct SettingsCard<Content: View>: View {
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
             }
         }
+    }
+}
+
+struct SettingsButtonStyle: ButtonStyle {
+    var prominent = false
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(SettingsTheme.ink)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(prominent ? SettingsTheme.accent.opacity(configuration.isPressed ? 0.22 : 0.12) : (configuration.isPressed ? SettingsTheme.line : SettingsTheme.inset), in: RoundedRectangle(cornerRadius: 6))
+            .opacity(enabled ? 1 : 0.4)
+            .scaleEffect(reduceMotion || !configuration.isPressed ? 1 : 0.98)
+            .animation(reduceMotion ? nil : AppMotion.control, value: configuration.isPressed)
     }
 }
 
@@ -48,7 +62,7 @@ struct SettingsRow<Content: View>: View {
             Spacer(minLength: 12)
             content()
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
+        .padding(.horizontal, 16).padding(.vertical, 14)
     }
 }
 
@@ -85,35 +99,32 @@ struct GlassSegmentedControl<Value: Hashable>: View {
                 Button { select(option.value) } label: {
                     Text(option.title)
                         .font(.system(size: 12, weight: selection == option.value ? .semibold : .medium))
-                        .foregroundStyle(selection == option.value ? SettingsTheme.ink : SettingsTheme.secondary)
+                        .foregroundStyle(selection == option.value ? AppTheme.ink : AppTheme.secondary)
                         .frame(maxWidth: .infinity).frame(height: 28)
                         .background {
                             if selection == option.value {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.white.opacity(scheme == .dark ? 0.16 : 0.92))
-                                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 0.5))
-                                    .shadow(color: .black.opacity(scheme == .dark ? 0.2 : 0.10), radius: 3, y: 1)
+                                Capsule()
+                                    .fill(AppTheme.elevated)
+                                    .shadow(color: .black.opacity(scheme == .dark ? 0.2 : 0.08), radius: 3, y: 1)
                                     .matchedGeometryEffect(id: "selection", in: indicator)
                             } else if hovered == option.value {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(SettingsTheme.inset)
+                                Capsule().fill(AppTheme.inset)
                             }
                         }
-                        .contentShape(RoundedRectangle(cornerRadius: 7))
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(SoftPressButtonStyle())
                 .focused($focused, equals: option.value)
                 .onHover { hovered = $0 ? option.value : nil }
-                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(SettingsTheme.accent.opacity(focused == option.value ? 0.8 : 0), lineWidth: 1.5))
+                .overlay(Capsule()
+                    .strokeBorder(AppTheme.accent.opacity(focused == option.value ? 0.8 : 0), lineWidth: 1.5))
                 .accessibilityLabel(option.title)
                 .accessibilityAddTraits(selection == option.value ? .isSelected : [])
             }
         }
-        .padding(3)
-        .background(Color.black.opacity(scheme == .dark ? 0.12 : 0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(SettingsTheme.line, lineWidth: 0.5))
-        .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82), value: selection)
+        .padding(2)
+        .background(scheme == .dark ? AppTheme.panel : AppTheme.inset, in: Capsule())
+        .animation(reduceMotion ? nil : AppMotion.control, value: selection)
         .opacity(enabled ? 1 : 0.45)
         .onMoveCommand(perform: move)
         .accessibilityElement(children: .contain)

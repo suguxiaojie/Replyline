@@ -60,7 +60,9 @@ final class CaptureFlight {
     ///   - to: the card's frame on the line, in screen coordinates, unrotated.
     ///   - tilt: the card's resting tilt in degrees, clockwise, as SwiftUI uses.
     static func fly(image: CGImage, from: CGRect, to: CGRect, tilt: CGFloat, on screen: NSScreen,
+                    reducedMotion: Bool? = nil,
                     completion: @escaping () -> Void) {
+        if reducedMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { completion(); return }
         let flight = CaptureFlight(image: image, from: from, to: to, tilt: tilt, screen: screen)
         current.append(flight)
         flight.completion = { [weak flight] in
@@ -73,7 +75,8 @@ final class CaptureFlight {
     /// A discarded card falling off the line, drawn over the whole screen so
     /// it is never cut by the line's strip. Same motion as the app always had:
     /// 520 points down, tilting further, fading, 0.55 s ease in.
-    static func fall(image: CGImage, card: CGRect, tilt: CGFloat, on screen: NSScreen) {
+    static func fall(image: CGImage, card: CGRect, tilt: CGFloat, on screen: NSScreen, reducedMotion: Bool? = nil) {
+        if reducedMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
         let flight = CaptureFlight(image: image, from: card, to: card, tilt: tilt, screen: screen)
         flight.falling = true
         flight.duration = 0.55
@@ -115,7 +118,7 @@ final class CaptureFlight {
         edge.mask = edgeMask
 
         photo.contents = image
-        photo.contentsGravity = .resizeAspectFill
+        photo.contentsGravity = .resizeAspect
         photo.masksToBounds = true
         photo.contentsScale = scale
 
